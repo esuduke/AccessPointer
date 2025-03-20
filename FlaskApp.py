@@ -17,7 +17,7 @@ class FlaskApp:
         public_url = self.tunnel.start(port) # start ngrok
 
         #Send email
-        self.sender.send_email("njczarne@syr.edu", "Updated ngrok URL", f"New ngrok URL: {public_url}")
+        # self.sender.send_email("njczarne@syr.edu", "Updated ngrok URL", f"New ngrok URL: {public_url}")
 
         print(f" * Secure ngrok tunnel available at: {public_url}")
         self.app.run(host="0.0.0.0", port=port)
