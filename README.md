@@ -3,7 +3,7 @@ Libraries to Install to Run the Program:
 *** to use ngrok an account needs to be made ***
 pip install ngrok
 
-pip install django flask pyngrok routes
+pip install django flask pyngrok routes pywin32
 
 
 
