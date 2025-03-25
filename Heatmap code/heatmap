@@ -5,14 +5,16 @@ import matplotlib.animation as animation
 from matplotlib.backend_bases import KeyEvent
 from scipy.interpolate import griddata
 import random
+import DatabaseHandler as db
 
 plt.rcParams['keymap.save'] = []  # Disable 's' for saving
 
 # List of floor plan images (replace with actual paths)
 images = [
     "Floor1.png",
-    "Floor2.png",
 ]
+
+database = db.DatabaseHandler()
 
 # Load image function
 def load_image(image_path):
