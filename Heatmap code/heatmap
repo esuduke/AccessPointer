@@ -4,7 +4,6 @@ import matplotlib.image as mpimg
 import matplotlib.animation as animation
 from matplotlib.backend_bases import KeyEvent
 from scipy.interpolate import griddata
-import random
 import DatabaseHandler as db
 
 plt.rcParams['keymap.save'] = []  # Disable 's' for saving
@@ -14,7 +13,8 @@ images = [
     "Floor1.png",
 ]
 
-database = db.DatabaseHandler()
+database_handler = db.DatabaseHandler()
+database = database_handler.get_data()
 
 # Load image function
 def load_image(image_path):
@@ -31,31 +31,65 @@ step_size = 0.5  # Movement step
 
 # Set up the figure
 fig, ax = plt.subplots(figsize=(8, 6))
-terrain_display = ax.imshow(terrain_map, extent=[0, 10, 0, 10], aspect='auto')
+terrain_display = ax.imshow(terrain_map, extent=[0, 100, 0, 100], aspect='auto')
 
-# Sample WiFi speed data (random values for now, replace with real data)
-wifi_data_points = np.array([
-    [0, 2, 50],  # (x, y, speed in Mbps)
-    [4, 6, 20],
-    [6, 2, 200],
-    [8, 8, 10],
-    [7, 5, 75],
-    [10, 2, 40]
-])
+# Function to normalize the latitude and longitude to fit within a grid
+def normalize_coordinates(lat, lon, min_lat, max_lat, min_lon, max_lon, grid_size=100):
+    # Normalize latitude and longitude to fit within the grid size
+    normalized_x = (lon - min_lon) / (max_lon - min_lon) * grid_size
+    normalized_y = (lat - min_lat) / (max_lat - min_lat) * grid_size
+    return normalized_x, normalized_y
 
-# Function to generate heatmap based on WiFi speeds
+
+# NEW Function to extract WiFi data from the database
+def extract_wifi_data(database):
+    wifi_data_points = []
+    
+    # Define the floor plan's lat, lon boundaries
+    min_lat, max_lat = 43.0370, 43.0380  # Adjust to fit your floor plan's latitude range
+    min_lon, max_lon = -76.1330, -76.1310  # Adjust to fit your floor plan's longitude range
+    
+    for unique_id, data in database.items():
+        location = data.get('location')
+        if location is not None:
+            # Assuming `data` contains WiFi speed information like download, upload, and ping
+            download = data['download']
+            upload = data['upload']
+            ping = data['ping']
+            lat, lon = location['latitude'], location['longitude']
+            lat = float(lat)
+            lon = float(lon)
+            
+            # Normalize the latitude and longitude to grid coordinates
+            x, y = normalize_coordinates(lat, lon, min_lat, max_lat, min_lon, max_lon)
+            if x < 0 :
+                x = 0 
+            if y < 0 :
+                y = 0
+            if download > 500:
+                download = 500                
+            
+            wifi_data_points.append([x, y, download])  # Here we use `download` as WiFi speed
+    
+    return np.array(wifi_data_points)
+
+# Extract WiFi data from the database
+wifi_data_points = extract_wifi_data(database)
+
+print(wifi_data_points)
+
+# Function to generate heatmap data based on WiFi speeds
 def generate_heatmap_data():
     """ Generate interpolated WiFi speed heatmap """
     X, Y = np.meshgrid(np.linspace(0, 10, 100), np.linspace(0, 10, 100))
-   # speeds = griddata(wifi_data_points[:, :2], wifi_data_points[:, 2], (X, Y), method='cubic', fill_value=0)
-    speeds = np.random.uniform(10,500, X.shape)
+    speeds = griddata(wifi_data_points[:, :2], wifi_data_points[:, 2], (X, Y), method='cubic', fill_value=0)
     return speeds
 
 # Generate initial heatmap data
 heatmap_data = generate_heatmap_data()
 
 # Overlay heatmap
-heatmap = ax.imshow(heatmap_data, cmap="coolwarm", alpha=0.5, extent=[0, 10, 0, 10], interpolation='bilinear', vmin=0, vmax=500)
+heatmap = ax.imshow(heatmap_data, cmap="coolwarm", alpha=0.5, extent=[0, 100, 0, 100], interpolation='bilinear', vmin=0, vmax=700)
 
 # Colorbar
 cbar = plt.colorbar(heatmap, ax=ax, label="WiFi Speed (Mbps)")
