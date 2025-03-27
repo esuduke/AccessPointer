@@ -2,18 +2,18 @@ import threading
 from flask import Flask
 from Routes import Routes
 from NgrokTunnel import NgrokTunnel
-from EmailSender import EmailSender
+# from EmailSender import EmailSender
 from DatabaseHandler import DatabaseHandler
 
 class FlaskApp:
     def __init__(self):
         self.app = Flask(__name__)
         self.tunnel = NgrokTunnel()
-        self.sender = EmailSender()
+       # self.sender = EmailSender()
         self.routes = Routes(self.app)
 
     def run(self):
-        port = 5000
+        port = 8001
         public_url = self.tunnel.start(port) # start ngrok
 
         #Send email
