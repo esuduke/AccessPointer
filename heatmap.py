@@ -112,9 +112,14 @@ def update(frame):
     # If you want to simulate data updates, you can add new data points here
     # For example, add random changes to the WiFi data points
     
-    wifi_data_points = np.append(wifi_data_points, np.random.rand(20, 3) * [100, 100, 500], axis=0)
-    heatmap_data = generate_heatmap_data()  # Update heatmap based on latest data
-    heatmap.set_data(heatmap_data)  # Set new heatmap data
+    # wifi_data_points = np.append(wifi_data_points, np.random.rand(20, 3) * [100, 100, 500], axis=0)
+    # heatmap_data = generate_heatmap_data()  # Update heatmap based on latest data
+    # heatmap.set_data(heatmap_data)  # Set new heatmap data
+
+    updated_data = extract_wifi_data(database)
+    heatmap.set_data(updated_data)
+    # print("Data updated.")
+
     return terrain_display, heatmap
 
 # Animate heatmap
