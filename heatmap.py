@@ -105,19 +105,20 @@ heatmap = ax.imshow(heatmap_data, cmap="coolwarm", alpha=0.5, extent=[0, 100, 0,
 # Colorbar
 cbar = plt.colorbar(heatmap, ax=ax, label="WiFi Speed (Mbps)")
 
+
 # Function to update the heatmap dynamically
 def update(frame):
-    """ Updates the heatmap visualization """
     global wifi_data_points
     # If you want to simulate data updates, you can add new data points here
     # For example, add random changes to the WiFi data points
+    
     wifi_data_points = np.append(wifi_data_points, np.random.rand(20, 3) * [100, 100, 500], axis=0)
     heatmap_data = generate_heatmap_data()  # Update heatmap based on latest data
     heatmap.set_data(heatmap_data)  # Set new heatmap data
     return terrain_display, heatmap
 
 # Animate heatmap
-ani = animation.FuncAnimation(fig, update, interval=1000)  # Update every second (1000 ms)
+ani = animation.FuncAnimation(fig, update, interval=1000, frames= 1)  # Update every second (1000 ms)
 
 # Show plot
 plt.show()
