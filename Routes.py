@@ -1,7 +1,9 @@
 from flask import Flask, render_template, request, jsonify
+import uuid
 import random
 from SpeedTestHandler import SpeedTestHandler
 from DatabaseHandler import DatabaseHandler
+import threading
 
 class Routes:
     def __init__(self, app: Flask):
@@ -9,8 +11,8 @@ class Routes:
         self.db_handler = DatabaseHandler()
         self.speed_test = SpeedTestHandler()
         self.generated_id = None
-        self.latitude = None  # Add to store real-time latitude
-        self.longitude = None  # Add to store real-time longitude
+        self.user_sessions = {} # Maps unique_id -> (lat, long)
+        self.session_lock = threading.Lock()
         self.setup_routes()
 
 
@@ -43,13 +45,14 @@ class Routes:
             data = request.json
             latitude = data.get("latitude")
             longitude = data.get("longitude")
-            if latitude is not None and longitude is not None:
-                # Process location in real-time
-                self.latitude = float(latitude)
-                self.longitude = float(longitude)
+            session_id = data.get("session_id")  # a UUID string from the browser
 
-                return jsonify({"latitude": latitude, "longitude": longitude}), 200
+            if latitude is not None and longitude is not None and session_id is not None:
+                with self.session_lock:
+                    self.user_sessions[session_id] = (float(latitude), float(longitude))
+                return jsonify({"status": "Location saved", "session_id": session_id}), 200
             return jsonify({"error": "Invalid data"}), 400
+
         
         @self.app.route("/speed_test", methods=["GET"])
         def speed_test():
@@ -70,8 +73,17 @@ class Routes:
                 "id": self.generated_id
             })
         
-    def get_user_location(self):
-        return self.latitude, self.longitude
+
+        
+    def get_user_session_location(self, session_id):
+        with self.session_lock:
+            return self.user_sessions.get(session_id, (None, None))
+
+    def get_all_sessions(self):
+        with self.session_lock:
+            return list(self.user_sessions.keys())
+
+
         
 def setup_routes(app):
     Routes(app)

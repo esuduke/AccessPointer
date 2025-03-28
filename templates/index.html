@@ -3,18 +3,15 @@
 <head>
   <title>Geolocation & Speed Test</title>
   <script>
-    let storedLatitude = null;
-    let storedLongitude = null;
+    // ✅ Generate a unique session ID once per user session
+    const session_id = crypto.randomUUID();
 
-    // ------------------------
-    // 1️⃣ Request location permission and store
-    // ------------------------
+    let uniqueId = null;
+
     function requestAndStoreLocation() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            storedLatitude = position.coords.latitude;
-            storedLongitude = position.coords.longitude;
             document.getElementById("status").innerHTML = "Location permission granted!";
           },
           (error) => {
@@ -27,20 +24,14 @@
       }
     }
 
-    // ------------------------
-    // 2️⃣ Speed Test + Location
-    // ------------------------
     function getLocationAndSpeedTest() {
       document.getElementById("speed-test-status").innerHTML = "Running speed test...";
 
-      // First, get a fresh unique ID
       fetch("/generate_unique_id")
         .then(response => response.json())
         .then(data => {
-          let uniqueId = data.id;
-          console.log("Generated unique ID:", uniqueId);
+          uniqueId = data.id;
 
-          // Now, run speed test
           fetch("/speed_test")
             .then(response => response.json())
             .then(testData => {
@@ -49,7 +40,6 @@
                 "Upload Speed: " + testData.upload_speed + "<br>" +
                 "Ping: " + testData.ping;
 
-              // After speed test, get real-time location
               navigator.geolocation.getCurrentPosition(
                 (position) => {
                   const lat = position.coords.latitude;
@@ -57,7 +47,7 @@
 
                   document.getElementById("status").innerHTML = "Latitude: " + lat + "<br>Longitude: " + long;
 
-                  // Send to /save_location with fresh unique ID
+                  // ✅ Send location with unique ID
                   fetch("/save_location", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -81,9 +71,6 @@
         .catch(error => console.error("Error generating unique ID:", error));
     }
 
-    // ------------------------
-    // 3️⃣ Real-time location every 10 seconds (separate)
-    // ------------------------
     function startRealTimeLocationUpdates() {
       if (navigator.geolocation) {
         setInterval(() => {
@@ -94,11 +81,15 @@
 
               console.log("Real-time location:", latitude, longitude);
 
-              // Send to /save_user_location (no unique ID)
+              // ✅ Send real-time location with session_id
               fetch("/save_user_location", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ latitude: latitude, longitude: longitude })
+                body: JSON.stringify({
+                  latitude: latitude,
+                  longitude: longitude,
+                  session_id: session_id
+                })
               })
               .then(response => response.json())
               .then(data => {
@@ -111,25 +102,19 @@
             },
             { enableHighAccuracy: true }
           );
-        }, 10000); // Every 10 seconds
+        }, 10000); // every 10 seconds
       } else {
         console.error("Geolocation not supported.");
       }
     }
 
-    // ------------------------
-    // 4️⃣ Background Speed Test + Location every 1 minute
-    // ------------------------
     function startBackgroundSpeedTest() {
       setInterval(() => {
         console.log("Running background speed test...");
-        getLocationAndSpeedTest(); // Reuse same function
-      }, 60000); // Every 60 seconds
+        getLocationAndSpeedTest();
+      }, 60000); // every 60 seconds
     }
 
-    // ------------------------
-    // Handle location errors
-    // ------------------------
     function showError(error) {
       let message = "";
       switch (error.code) {
@@ -149,13 +134,10 @@
       document.getElementById("status").innerHTML = "Error: " + message;
     }
 
-    // ------------------------
-    // On page load
-    // ------------------------
-    window.onload = function() {
-      requestAndStoreLocation();      // Request location permission
-      startRealTimeLocationUpdates(); // Start real-time location updates
-      startBackgroundSpeedTest();     // Start background speed tests every minute
+    window.onload = function () {
+      requestAndStoreLocation();
+      startRealTimeLocationUpdates();
+      startBackgroundSpeedTest();
     };
   </script>
 </head>
