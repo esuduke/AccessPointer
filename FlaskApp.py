@@ -71,5 +71,7 @@ if __name__ == "__main__":
     flask_thread.daemon = True
     flask_thread.start()
 
+    
+
     while True:
         pass # Keeps the main thread running

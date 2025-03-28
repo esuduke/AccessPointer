@@ -3,20 +3,16 @@
 <head>
   <title>Geolocation & Speed Test</title>
   <script>
-    // ✅ Generate a unique session ID once per user session
     const session_id = crypto.randomUUID();
-
     let uniqueId = null;
 
     function requestAndStoreLocation() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          (position) => {
+          () => {
             document.getElementById("status").innerHTML = "Location permission granted!";
           },
-          (error) => {
-            showError(error);
-          },
+          showError,
           { enableHighAccuracy: true }
         );
       } else {
@@ -25,16 +21,25 @@
     }
 
     function getLocationAndSpeedTest() {
+      const btn = document.getElementById("speedTestBtn");
+      btn.disabled = true; // 🔒 Prevent manual spam
+
       document.getElementById("speed-test-status").innerHTML = "Running speed test...";
 
-      fetch("/generate_unique_id")
+      fetch(`/generate_unique_id?session_id=${session_id}`)
         .then(response => response.json())
         .then(data => {
           uniqueId = data.id;
 
-          fetch("/speed_test")
+          fetch(`/speed_test?session_id=${session_id}`)
             .then(response => response.json())
             .then(testData => {
+              if (testData.error) {
+                document.getElementById("speed-test-status").innerHTML = testData.error;
+                btn.disabled = false;
+                return;
+              }
+
               document.getElementById("speed-test-status").innerHTML =
                 "Download Speed: " + testData.download_speed + "<br>" +
                 "Upload Speed: " + testData.upload_speed + "<br>" +
@@ -45,30 +50,27 @@
                   const lat = position.coords.latitude;
                   const long = position.coords.longitude;
 
-                  document.getElementById("status").innerHTML = "Latitude: " + lat + "<br>Longitude: " + long;
+                  document.getElementById("status").innerHTML =
+                    "Latitude: " + lat + "<br>Longitude: " + long;
 
-                  // ✅ Send location with unique ID
                   fetch("/save_location", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ latitude: lat, longitude: long, id: uniqueId })
+                    body: JSON.stringify({
+                      latitude: lat,
+                      longitude: long,
+                      session_id: session_id
+                    })
                   })
-                  .then(response => response.text())
-                  .then(data => console.log("Server Response:", data))
-                  .catch(error => console.error("Error:", error));
+                  .then(() => btn.disabled = false)
+                  .catch(() => btn.disabled = false);
                 },
-                (error) => {
-                  showError(error);
-                },
+                () => btn.disabled = false,
                 { enableHighAccuracy: true }
               );
             })
-            .catch(error => {
-              console.error("Error running speed test:", error);
-              document.getElementById("speed-test-status").innerHTML = "Speed test failed.";
-            });
-        })
-        .catch(error => console.error("Error generating unique ID:", error));
+            .catch(() => btn.disabled = false);
+        });
     }
 
     function startRealTimeLocationUpdates() {
@@ -79,9 +81,6 @@
               const latitude = position.coords.latitude;
               const longitude = position.coords.longitude;
 
-              console.log("Real-time location:", latitude, longitude);
-
-              // ✅ Send real-time location with session_id
               fetch("/save_user_location", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -90,19 +89,14 @@
                   longitude: longitude,
                   session_id: session_id
                 })
-              })
-              .then(response => response.json())
-              .then(data => {
-                console.log("Real-time location sent:", data);
-              })
-              .catch(error => console.error("Error sending real-time location:", error));
+              });
             },
             (error) => {
               console.error("Real-time location error:", error);
             },
             { enableHighAccuracy: true }
           );
-        }, 10000); // every 10 seconds
+        }, 10000);
       } else {
         console.error("Geolocation not supported.");
       }
@@ -110,8 +104,15 @@
 
     function startBackgroundSpeedTest() {
       setInterval(() => {
-        console.log("Running background speed test...");
-        getLocationAndSpeedTest();
+        fetch(`/check_speed_test_status?session_id=${session_id}`)
+          .then(response => response.json())
+          .then(data => {
+            if (!data.in_progress) {
+              getLocationAndSpeedTest();
+            } else {
+              console.log("Background speed test skipped (already in progress)");
+            }
+          });
       }, 60000); // every 60 seconds
     }
 
@@ -127,9 +128,8 @@
         case error.TIMEOUT:
           message = "The request to get user location timed out.";
           break;
-        case error.UNKNOWN_ERROR:
+        default:
           message = "An unknown error occurred.";
-          break;
       }
       document.getElementById("status").innerHTML = "Error: " + message;
     }
@@ -146,7 +146,8 @@
 
   <p id="status">Requesting location permission...</p>
 
-  <button onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
+  <!-- 🔄 This button now auto-disables while a speed test runs -->
+  <button id="speedTestBtn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
   <p id="speed-test-status"></p>
 </body>
 </html>
