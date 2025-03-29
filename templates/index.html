@@ -22,7 +22,7 @@
 
     function getLocationAndSpeedTest() {
       const btn = document.getElementById("speedTestBtn");
-      btn.disabled = true; // 🔒 Prevent manual spam
+      btn.disabled = true;
 
       document.getElementById("speed-test-status").innerHTML = "Running speed test...";
 
@@ -113,7 +113,12 @@
               console.log("Background speed test skipped (already in progress)");
             }
           });
-      }, 60000); // every 60 seconds
+      }, 60000);
+    }
+
+    function refreshHeatmap() {
+      const heatmap = document.getElementById("heatmap-img");
+      heatmap.src = `/static/heatmap.png?ts=${new Date().getTime()}`;
     }
 
     function showError(error) {
@@ -138,6 +143,7 @@
       requestAndStoreLocation();
       startRealTimeLocationUpdates();
       startBackgroundSpeedTest();
+      setInterval(refreshHeatmap, 5000); // ⏱ Refresh heatmap every 5 seconds
     };
   </script>
 </head>
@@ -146,8 +152,10 @@
 
   <p id="status">Requesting location permission...</p>
 
-  <!-- 🔄 This button now auto-disables while a speed test runs -->
   <button id="speedTestBtn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
   <p id="speed-test-status"></p>
+
+  <h2>Live WiFi Heatmap</h2>
+  <img id="heatmap-img" src="/static/heatmap.png" alt="Heatmap" style="max-width: 100%;">
 </body>
 </html>

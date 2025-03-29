@@ -73,7 +73,8 @@ class DatabaseHandler:
 
 
 if __name__ == "__main__":
-    data = DatabaseHandler.get_data()
+    handler = DatabaseHandler()
+    data = handler.get_data()
     for unique_id, info in data.items():
         print(f"Unique ID: {unique_id}")
         print(f"Internet Data: {info['download']} download, {info['upload']} upload, {info['ping']} ping")

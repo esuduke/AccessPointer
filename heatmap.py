@@ -1,129 +1,126 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-import matplotlib.animation as animation
-from matplotlib.backend_bases import KeyEvent
 from scipy.interpolate import griddata
 import DatabaseHandler as db
-import random
+import os
+import time
 
-# List of floor plan images (replace with actual paths)
-images = ["Floor1.png"]
+# Config (building bounds)
+FLOOR_PLAN_PATH = "Floor1.png"
+OUTPUT_PATH = "static/heatmap.png"
+MIN_LAT = 43.037306
+MAX_LAT = 43.037944
+MIN_LON = -76.132889
+MAX_LON = -76.132222
+GRID_SIZE = 100
 
+# Ensure static directory exists
+os.makedirs("static", exist_ok=True)
+
+# Load floor plan image
+try:
+    terrain_map = mpimg.imread(FLOOR_PLAN_PATH)
+except FileNotFoundError:
+    raise FileNotFoundError(f"Floor plan image '{FLOOR_PLAN_PATH}' not found.")
+
+# Database handler
 database_handler = db.DatabaseHandler()
-database = database_handler.get_data()
 
-# Load image function
-def load_image(image_path):
-    return mpimg.imread(image_path)
+def clamp(val, min_val, max_val):
+    return max(min_val, min(val, max_val))
 
-# Initial setup
-current_image_index = 0
-terrain_map = load_image(images[current_image_index])
-print("Terrain map loaded.")
+def normalize_coordinates(lat, lon):
+    # Clamp lat/lon to building bounds
+    lat = clamp(lat, MIN_LAT, MAX_LAT)
+    lon = clamp(lon, MIN_LON, MAX_LON)
 
-# User position
-user_x, user_y = 5, 5  # Starting position
-step_size = 0.5  # Movement step
+    # Normalize to 0–100 grid
+    x = (lon - MIN_LON) / (MAX_LON - MIN_LON) * GRID_SIZE
+    y = (lat - MIN_LAT) / (MAX_LAT - MIN_LAT) * GRID_SIZE
 
-# Set up the figure
-fig, ax = plt.subplots(figsize=(8, 6))
-terrain_display = ax.imshow(terrain_map, extent=[0, 100, 0, 100], aspect='auto')
+    # ✅ Rotate 90° CLOCKWISE (SW → NW, SE → NE, etc.)
+    x_rotated = GRID_SIZE - y
+    y_rotated = x
+    return x_rotated, y_rotated
 
-# Function to normalize the latitude and longitude to fit within a grid
-def normalize_coordinates(lat, lon, min_lat, max_lat, min_lon, max_lon, grid_size=100):
-    # Normalize latitude and longitude to fit within the grid size
-    normalized_x = (lon - min_lon) / (max_lon - min_lon) * grid_size
-    normalized_y = (lat - min_lat) / (max_lat - min_lat) * grid_size
-    return normalized_x, normalized_y
 
-# NEW Function to extract WiFi data from the database
 def extract_wifi_data(database):
-    wifi_data_points = []
-    
-    # Define the floor plan's lat, lon boundaries
-    min_lat, max_lat = 43.0370, 43.0380  # Adjust to fit your floor plan's latitude range
-    min_lon, max_lon = -76.1330, -76.1310  # Adjust to fit your floor plan's longitude range
-    
-    for unique_id, data in database.items():
-        location = data.get('location')
-        if location is not None:
-            # Assuming `data` contains WiFi speed information like download, upload, and ping
-            download = data['download']
-            upload = data['upload']
-            ping = data['ping']
-            lat, lon = location['latitude'], location['longitude']
-            lat = float(lat)
-            lon = float(lon)
-            
-            # Normalize the latitude and longitude to grid coordinates
-            x, y = normalize_coordinates(lat, lon, min_lat, max_lat, min_lon, max_lon)
-            if x < 0 :
-                x = random.uniform(0, 10) 
-            if y < 0 :
-                y = random.uniform(0, 10)
-            if download > 500:
-                download = 500
-                
-            wifi_data_points.append([x, y, download])  # Here we use `download` as WiFi speed
-    
-    return np.array(wifi_data_points)
+    points = []
+    # print(f"[Heatmap] Total entries from database: {len(database)}")
 
-# Generate fake data for testing
-def generate_fake_data(num_entries=10):
-    fake_entries = {}
-    for i in range(num_entries):
-        fake_entries[str(i + 100)] = {  # Unique ID for fake data
-            "location": {
-                "latitude": round(random.uniform(43.030, 43.050), 6),
-                "longitude": round(random.uniform(-76.140, -76.120), 6)
-            },
-            "download": random.randint(50, 500),  # Random speed in Mbps
-            "upload": random.randint(10, 100),
-            "ping": random.randint(5, 50)
-        }
-    return fake_entries
+    for unique_id, entry in database.items():
+        loc = entry.get("location")
+        if not loc:
+            # print(f"[Heatmap] Skipping ID {unique_id}: no location.")
+            continue
+        try:
+            lat = float(loc["latitude"])
+            lon = float(loc["longitude"])
+            x, y = normalize_coordinates(lat, lon)
 
-database.update(generate_fake_data(20))  # Add fake data to the database
+            speed = min(entry.get("download", 0), 500)
+            points.append([x, y, speed])
+            # print(f"[Heatmap] Included: ID {unique_id}, x={x:.2f}, y={y:.2f}, speed={speed}")
+        except Exception as e:
+            print(f"[Heatmap] Skipping ID {unique_id}: error -> {e}")
+    # print(f"[Heatmap] Usable WiFi points: {len(points)}")
+    return np.array(points)
 
-# Extract WiFi data from the database
-wifi_data_points = extract_wifi_data(database)
+def generate_heatmap(wifi_points, session_locations={}):
+    # print("[Heatmap] Generating heatmap...")
 
-# Function to generate heatmap data based on WiFi speeds
-def generate_heatmap_data():
-    """ Generate interpolated WiFi speed heatmap """
-    X, Y = np.meshgrid(np.linspace(0, 100, 100), np.linspace(0, 100, 100))
-    speeds = griddata(wifi_data_points[:, :2], wifi_data_points[:, 2], (X, Y), method='cubic', fill_value=400)
-    return speeds
+    if wifi_points.shape[0] < 3:
+        print("[Heatmap] Not enough data points to generate heatmap.")
+        return None
 
-# Generate initial heatmap data
-heatmap_data = generate_heatmap_data()
+    X, Y = np.meshgrid(np.linspace(0, 100, GRID_SIZE), np.linspace(0, 100, GRID_SIZE))
 
-# Overlay heatmap
-heatmap = ax.imshow(heatmap_data, cmap="coolwarm", alpha=0.5, extent=[0, 100, 0, 100], interpolation='bilinear', vmin=0, vmax=700)
+    # Interpolation with fallback
+    for method in ['cubic', 'linear', 'nearest']:
+        try:
+            Z = griddata(wifi_points[:, :2], wifi_points[:, 2], (X, Y), method=method, fill_value=0)
+            # print(f"[Heatmap] Interpolation succeeded with method: {method}")
+            break
+        except Exception as e:
+            print(f"[Heatmap] Interpolation failed with method '{method}': {e}")
+            Z = None
 
-# Colorbar
-cbar = plt.colorbar(heatmap, ax=ax, label="WiFi Speed (Mbps)")
+    if Z is None:
+        print("[Heatmap] All interpolation methods failed. Skipping heatmap generation.")
+        return
 
+    # Plotting
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.imshow(terrain_map, extent=[0, 100, 0, 100], aspect='auto')
+    ax.imshow(Z, cmap="coolwarm", alpha=0.5, extent=[0, 100, 0, 100], vmin=0, vmax=500)
 
-# Function to update the heatmap dynamically
-def update(frame):
-    global wifi_data_points
-    # If you want to simulate data updates, you can add new data points here
-    # For example, add random changes to the WiFi data points
-    
-    # wifi_data_points = np.append(wifi_data_points, np.random.rand(20, 3) * [100, 100, 500], axis=0)
-    # heatmap_data = generate_heatmap_data()  # Update heatmap based on latest data
-    # heatmap.set_data(heatmap_data)  # Set new heatmap data
+    # Optional: visualize raw WiFi points
+    if wifi_points.shape[0] > 0:
+        ax.scatter(wifi_points[:, 0], wifi_points[:, 1], c='black', s=10, label='WiFi Points')
 
-    updated_data = extract_wifi_data(database)
-    heatmap.set_data(updated_data)
-    # print("Data updated.")
+    # Optional: plot user locations
+    for sid, (lat, lon) in session_locations.items():
+        ux, uy = normalize_coordinates(lat, lon)
+        ax.plot(ux, uy, 'ko', markersize=5)
+        ax.text(ux + 1, uy + 1, sid[:4], fontsize=6, color='black')
 
-    return terrain_display, heatmap
+    plt.colorbar(ax.images[1], ax=ax, label="WiFi Speed (Mbps)")
 
-# Animate heatmap
-ani = animation.FuncAnimation(fig, update, interval=1000, frames= 1)  # Update every second (1000 ms)
+    # print(f"[Heatmap] Attempting to save to: {os.path.abspath(OUTPUT_PATH)}")
+    plt.savefig(OUTPUT_PATH, bbox_inches="tight")
+    plt.close(fig)
+    # print(f"[Heatmap] Heatmap saved to {OUTPUT_PATH}")
 
-# Show plot
-plt.show()
+def loop_generate_heatmap():
+    while True:
+        try:
+            database = database_handler.get_data()
+            wifi_points = extract_wifi_data(database)
+            generate_heatmap(wifi_points, session_locations={})
+        except Exception as e:
+            print(f"[Heatmap] Error: {e}")
+        time.sleep(30)
+
+if __name__ == "__main__":
+    loop_generate_heatmap()

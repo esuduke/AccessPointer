@@ -4,6 +4,8 @@ from Routes import Routes
 from NgrokTunnel import NgrokTunnel
 from EmailSender import EmailSender
 from DatabaseHandler import DatabaseHandler
+import time
+from heatmap import generate_heatmap, extract_wifi_data
 
 class FlaskApp:
     def __init__(self):
@@ -58,6 +60,20 @@ class FlaskApp:
                 print("Invalid input")
 
 
+
+
+def periodic_heatmap_update(routes_obj):
+    handler = DatabaseHandler()
+    while True:
+        with routes_obj.session_lock:
+            current_sessions = dict(routes_obj.user_sessions)
+        database = handler.get_data()
+        wifi_points = extract_wifi_data(database)
+        generate_heatmap(wifi_points, current_sessions)
+        time.sleep(30)
+
+
+
 if __name__ == "__main__":
     flask_app = FlaskApp()
 
@@ -71,7 +87,9 @@ if __name__ == "__main__":
     flask_thread.daemon = True
     flask_thread.start()
 
-    
+    heatmap_thread = threading.Thread(target=periodic_heatmap_update, args=(flask_app.routes,))
+    heatmap_thread.daemon = True
+    heatmap_thread.start()
 
     while True:
         pass # Keeps the main thread running

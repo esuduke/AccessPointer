@@ -4,6 +4,7 @@ import random
 from SpeedTestHandler import SpeedTestHandler
 from DatabaseHandler import DatabaseHandler
 import threading
+from heatmap import generate_heatmap
 
 class Routes:
     def __init__(self, app: Flask):
@@ -117,6 +118,14 @@ class Routes:
                 in_progress = self.speed_test_in_progress.get(session_id, False)
 
             return jsonify({"in_progress": in_progress})
+        
+        @self.app.route("/heatmap", methods=["GET"])
+        def heatmap_route():
+            with self.session_lock:
+                current_sessions = dict(self.user_sessions)
+            generate_heatmap(current_sessions)
+            return render_template("index.html")
+
 
 
     def get_user_session_location(self, session_id):
