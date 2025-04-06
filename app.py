@@ -44,7 +44,7 @@ class SpeedTestApp:
     def setup_routes(self):
         @self.app.route('/')
         def index():
-            return render_template('index.html')
+            return render_template('index1.html')
         
         @self.app.route('/test-file/<size>')
         def test_file(size):
