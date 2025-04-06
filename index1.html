@@ -1,0 +1,319 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internet Speed Test</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .dashboard {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .result-container {
+            display: flex;
+            justify-content: space-around;
+            margin: 30px 0;
+        }
+        .result-box {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            width: 30%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .speed-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #2c3e50;
+        }
+        .speed-unit {
+            font-size: 1em;
+            color: #7f8c8d;
+        }
+        .connection-quality {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .excellent {
+            color: #27ae60;
+        }
+        .good {
+            color: #2980b9;
+        }
+        .average {
+            color: #f39c12;
+        }
+        .poor {
+            color: #e74c3c;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            font-size: 1em;
+            cursor: pointer;
+            display: block;
+            margin: 20px auto;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .progress-container {
+            height: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #3498db;
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.5s;
+        }
+        .test-info {
+            text-align: center;
+            margin: 10px 0;
+            font-style: italic;
+            color: #7f8c8d;
+        }
+        .history-container {
+            margin-top: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Internet Speed Test</h1>
+    
+    <div class="dashboard">
+        <div class="result-container">
+            <div class="result-box">
+                <div>Download Speed</div>
+                <div class="speed-value" id="download-speed">-</div>
+                <div class="speed-unit">Mbps</div>
+            </div>
+            <div class="result-box">
+                <div>Test Progress</div>
+                <div class="progress-container">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+                <div id="test-status">Ready</div>
+            </div>
+            <div class="result-box">
+                <div>Connection Quality</div>
+                <div class="connection-quality" id="connection-quality">-</div>
+            </div>
+        </div>
+        
+        <div class="test-info" id="test-info">Click the button below to start the test</div>
+        
+        <button id="start-test">Start Speed Test</button>
+        
+        <div class="history-container hidden" id="history-container">
+            <h2>Test History</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Download (Mbps)</th>
+                        <th>Quality</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body">
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const startButton = document.getElementById('start-test');
+            const downloadSpeed = document.getElementById('download-speed');
+            const connectionQuality = document.getElementById('connection-quality');
+            const testInfo = document.getElementById('test-info');
+            const progressBar = document.getElementById('progress-bar');
+            const testStatus = document.getElementById('test-status');
+            const historyContainer = document.getElementById('history-container');
+            const historyBody = document.getElementById('history-body');
+            
+            const testHistory = [];
+            
+            async function runSpeedTest() {
+                startButton.disabled = true;
+                testStatus.textContent = 'Testing...';
+                progressBar.style.width = '0%';
+                downloadSpeed.textContent = '-';
+                connectionQuality.textContent = '-';
+                connectionQuality.className = 'connection-quality';
+                
+                // Test with multiple file sizes for better accuracy
+                const testSizes = ['1mb', '5mb', '10mb'];
+                const results = [];
+                
+                for (let i = 0; i < testSizes.length; i++) {
+                    const size = testSizes[i];
+                    const sizeInBytes = size === '1mb' ? 1 * 1024 * 1024 : 
+                                       size === '5mb' ? 5 * 1024 * 1024 : 
+                                       10 * 1024 * 1024;
+                    
+                    testInfo.textContent = `Testing with ${size.toUpperCase()} file (${i+1}/${testSizes.length})`;
+                    progressBar.style.width = `${(i / testSizes.length) * 100}%`;
+                    
+                    // Add a random parameter to prevent caching
+                    const cacheBuster = Math.random().toString(36).substring(2);
+                    const testFile = `/test-file/${size}?cb=${cacheBuster}`;
+                    
+                    try {
+                        const startTime = performance.now();
+                        
+                        const response = await fetch(testFile, { 
+                            method: 'GET',
+                            cache: 'no-store' // Prevent caching
+                        });
+                        
+                        const data = await response.blob();
+                        const endTime = performance.now();
+                        const durationInSeconds = (endTime - startTime) / 1000;
+                        const bitsLoaded = sizeInBytes * 8;
+                        const speedBps = bitsLoaded / durationInSeconds;
+                        const speedMbps = (speedBps / 1024 / 1024);
+                        
+                        results.push(speedMbps);
+                        
+                        // Update progress
+                        progressBar.style.width = `${((i+1) / testSizes.length) * 100}%`;
+                    } catch (error) {
+                        console.error("Error during speed test:", error);
+                        testInfo.textContent = `Error: ${error.message}`;
+                        startButton.disabled = false;
+                        testStatus.textContent = 'Failed';
+                        return;
+                    }
+                    
+                    // Small delay between tests
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+                // Calculate average speed (excluding outliers if we have enough samples)
+                let finalSpeed;
+                if (results.length >= 3) {
+                    // Sort results and take the middle ones (exclude min and max)
+                    const sortedResults = [...results].sort((a, b) => a - b);
+                    const middleResults = sortedResults.slice(1, sortedResults.length - 1);
+                    finalSpeed = middleResults.reduce((a, b) => a + b, 0) / middleResults.length;
+                } else {
+                    finalSpeed = results.reduce((a, b) => a + b, 0) / results.length;
+                }
+                
+                // Update the UI with the final result
+                const roundedSpeed = finalSpeed.toFixed(2);
+                downloadSpeed.textContent = roundedSpeed;
+                
+                // Determine connection quality
+                let quality;
+                if (finalSpeed >= 100) {
+                    quality = { text: 'Excellent', class: 'excellent' };
+                } else if (finalSpeed >= 25) {
+                    quality = { text: 'Good', class: 'good' };
+                } else if (finalSpeed >= 5) {
+                    quality = { text: 'Average', class: 'average' };
+                } else {
+                    quality = { text: 'Poor', class: 'poor' };
+                }
+                
+                connectionQuality.textContent = quality.text;
+                connectionQuality.classList.add(quality.class);
+                
+                // Add to history
+                testHistory.unshift({
+                    time: new Date().toLocaleTimeString(),
+                    speed: roundedSpeed,
+                    quality: quality.text
+                });
+                
+                // Update history table
+                updateHistory();
+                
+                // Test complete
+                testInfo.textContent = 'Test completed successfully';
+                testStatus.textContent = 'Complete';
+                startButton.disabled = false;
+                
+                // Show history if we have results
+                if (testHistory.length > 0) {
+                    historyContainer.classList.remove('hidden');
+                }
+            }
+            
+            function updateHistory() {
+                // Clear existing entries
+                historyBody.innerHTML = '';
+                
+                // Add new entries
+                testHistory.forEach(entry => {
+                    const row = document.createElement('tr');
+                    
+                    const timeCell = document.createElement('td');
+                    timeCell.textContent = entry.time;
+                    
+                    const speedCell = document.createElement('td');
+                    speedCell.textContent = `${entry.speed} Mbps`;
+                    
+                    const qualityCell = document.createElement('td');
+                    qualityCell.textContent = entry.quality;
+                    
+                    row.appendChild(timeCell);
+                    row.appendChild(speedCell);
+                    row.appendChild(qualityCell);
+                    
+                    historyBody.appendChild(row);
+                });
+            }
+            
+            startButton.addEventListener('click', runSpeedTest);
+        });
+    </script>
+</body>
+</html>
+            
