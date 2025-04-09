@@ -4,6 +4,7 @@ from Routes import Routes
 from NgrokTunnel import NgrokTunnel
 from EmailSender import EmailSender
 from DatabaseHandler import DatabaseHandler
+from BackendRoutes import backend_bp
 
 class FlaskApp:
     def __init__(self):
@@ -13,14 +14,15 @@ class FlaskApp:
         self.routes = Routes(self.app)
 
     def run(self):
-        port = 8001
-        public_url = self.tunnel.start(port) # start ngrok
+        port = 8000
+        # public_url = self.tunnel.start(port) # start ngrok
 
-        #Send email
-        self.sender.send_email("njczarne@syr.edu", "Updated ngrok URL", f"New ngrok URL: {public_url}")
+        # #Send email
+        # self.sender.send_email("njczarne@syr.edu", "Updated ngrok URL", f"New ngrok URL: {public_url}")
 
-        print(f" * Secure ngrok tunnel available at: {public_url}")
-        self.app.run(host="0.0.0.0", port=port)
+        # print(f" * Secure ngrok tunnel available at: {public_url}")
+        self.app.register_blueprint(backend_bp)
+        self.app.run(host='0.0.0.0', port=port, ssl_context=('cert.pem', 'key.pem'))
 
     def listen_for_input(self):
         while True:
