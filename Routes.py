@@ -11,11 +11,11 @@ class Routes:
         self.db_handler = DatabaseHandler()
         self.speed_test = SpeedTestHandler()
 
-        # Maps browser session_id (a string generated on the client) to a unique numeric id.
+        # Map session_id to unique ID
         self.session_ids_to_generated_ids = {}
         self.id_lock = threading.Lock()
 
-        # Stores user location data (for real‑time updates) keyed by session_id.
+        # Session ID to latest location (lat, lon)
         self.user_sessions = {}
         self.session_lock = threading.Lock()
 
@@ -29,16 +29,22 @@ class Routes:
         def index():
             return render_template("index.html")
 
+        @self.app.route("/generate_unique_id", methods=["GET"])
+        def generate_unique_id():
+            unique_id = self.generate_id()
+            return jsonify({"id": unique_id})
+
         @self.app.route("/save_location", methods=["POST"])
         def save_location():
             data = request.json
             latitude = data.get("latitude")
             longitude = data.get("longitude")
-            session_id = data.get("session_id")
-            if not session_id:
-                return "Missing session_id", 400
+            session_id = data.get("session_id") or data.get("id")  # Accept either key
 
-            # Retrieve or generate a unique id for this session.
+            if not session_id:
+                return "Missing session_id or id", 400
+
+            # Ensure session_id maps to unique id
             with self.id_lock:
                 current_id = self.session_ids_to_generated_ids.get(session_id)
                 if current_id is None:
@@ -53,40 +59,55 @@ class Routes:
 
         @self.app.route("/save_user_location", methods=["POST"])
         def save_user_location():
-            data = request.json
+            data = request.get_json(force=True)  # ⬅ forces parsing
             latitude = data.get("latitude")
             longitude = data.get("longitude")
-            session_id = data.get("session_id")
-
+            session_id = data.get("session_id") or data.get("id")
+            # print("save_user_location received:", data)
             if latitude is not None and longitude is not None and session_id is not None:
                 with self.session_lock:
                     self.user_sessions[session_id] = (float(latitude), float(longitude))
                 return jsonify({"status": "Location saved", "session_id": session_id}), 200
             return jsonify({"error": "Invalid data"}), 400
 
+
         @self.app.route("/submit-speed", methods=["POST"])
         def submit_speed():
             data = request.json
-            # Extract the LibreSpeed test metrics from the received data.
-            download_speed = data.get("dlStatus")
-            upload_speed = data.get("ulStatus")
-            ping = data.get("pingStatus")
-            
-            session_id = data.get("session_id")
-            if not session_id:
-                return jsonify({"error": "Missing session_id"}), 400
+            try:
+                download_speed = float(data.get("dlStatus"))
+                upload_speed = float(data.get("ulStatus"))
+                ping = float(data.get("pingStatus"))
+            except (TypeError, ValueError):
+                return jsonify({"error": "Invalid speed values"}), 400
 
-            # Retrieve or generate a unique id for this session.
+            session_id = data.get("session_id") or data.get("id")  # Accept either
+            if not session_id:
+                return jsonify({"error": "Missing session_id or id"}), 400
+
+            # Ensure ID mapping exists
             with self.id_lock:
                 current_id = self.session_ids_to_generated_ids.get(session_id)
                 if current_id is None:
                     current_id = self.generate_id()
                     self.session_ids_to_generated_ids[session_id] = current_id
 
-            # Store the speed test results using the unique id.
             self.db_handler.save_speed_test(download_speed, upload_speed, ping, current_id)
-            
             return jsonify({"message": "Speed test results saved successfully!", "id": current_id})
+
+        # Optional: For debugging from CLI
+        @self.app.route("/get_all_sessions", methods=["GET"])
+        def get_all_sessions():
+            with self.session_lock:
+                return jsonify(list(self.user_sessions.keys()))
+
+        @self.app.route("/get_location/<session_id>", methods=["GET"])
+        def get_location(session_id):
+            with self.session_lock:
+                location = self.user_sessions.get(session_id)
+                if location:
+                    return jsonify({"latitude": location[0], "longitude": location[1]})
+                return jsonify({"error": "Session ID not found"}), 404
 
     def get_user_session_location(self, session_id):
         with self.session_lock:

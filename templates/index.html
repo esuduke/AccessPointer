@@ -1,16 +1,22 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Geolocation & Speed Test</title>
-  <!-- Include the LibreSpeed test library -->
-  <script src="static/speedtest.js"></script>
-  <script>
-    // Generate a unique session id for this client.
-    const session_id = crypto.randomUUID();
-    let testInProgress = false; // Used to prevent overlapping tests
+  <script src="/static/speedtest.js"></script> <!-- Ensure this file exists -->
+</head>
+<body>
+  <h1>Geolocation & Speed Test</h1>
 
-    // Request initial geolocation permission.
+  <p id="status">Requesting location permission...</p>
+
+  <button onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
+  <p id="speed-test-status"></p>
+
+  <script>
+    const session_id = crypto.randomUUID();
+    let testInProgress = false;
+
     function requestAndStoreLocation() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -21,186 +27,136 @@
           { enableHighAccuracy: true }
         );
       } else {
-        document.getElementById("status").innerHTML = "Geolocation is not supported by this browser.";
+        document.getElementById("status").innerHTML = "Geolocation not supported.";
       }
     }
 
-    // Run the LibreSpeed test.
-    function runLibrespeedTest() {
+    function getLocationAndSpeedTest() {
       if (testInProgress) return;
       testInProgress = true;
-      const btn = document.getElementById("speedTestBtn");
-      btn.disabled = true;
       document.getElementById("speed-test-status").innerHTML = "Running speed test...";
 
-      // Configure the LibreSpeed test.
-      const s = new Speedtest();
-      s.setParameter("telemetry_level", "basic");
-      s.setParameter("getIp_ispInfo", true);
-      s.setParameter("time_dl", 10); // Download test duration (seconds)
-      s.setParameter("time_ul", 5);  // Upload test duration (seconds)
+      fetch(`/generate_unique_id?session_id=${session_id}`)
+        .then(res => res.json())
+        .then(data => {
+          const uniqueId = data.id;
 
-      // Set server details for LibreSpeed.
-      s.setSelectedServer({
-        name: "Local Flask Server",
-        server: window.location.origin + "/backend/",
-        dlURL: "garbage",
-        ulURL: "empty",
-        pingURL: "empty",
-        getIpURL: "getIP"
-      });
+          const s = new Speedtest();
+          s.setParameter("telemetry_level", "basic");
+          s.setParameter("getIp_ispInfo", true);
+          s.setParameter("time_dl", 10);
+          s.setParameter("time_ul", 5);
+          s.setSelectedServer({
+            name: "Local Server",
+            server: window.location.origin + "/backend/",
+            dlURL: "garbage",
+            ulURL: "empty",
+            pingURL: "empty",
+            getIpURL: "getIP"
+          });
 
-      let latestData = null;
+          let latestData = null;
+          s.onupdate = function (data) {
+            latestData = data;
+            document.getElementById("speed-test-status").innerHTML =
+              `Download: ${data.dlStatus} Mbps<br>` +
+              `Upload: ${data.ulStatus} Mbps<br>` +
+              `Ping: ${data.pingStatus} ms<br>` +
+              `Jitter: ${data.jitterStatus} ms`;
+          };
 
-      // Update the UI as the test proceeds.
-      s.onupdate = function(data) {
-        latestData = data;
-        document.getElementById("speed-test-status").innerHTML =
-          "Download: " + data.dlStatus + " Mbps<br>" +
-          "Upload: " + data.ulStatus + " Mbps<br>" +
-          "Ping: " + data.pingStatus + " ms<br>" +
-          "Jitter: " + data.jitterStatus + " ms";
-      };
+          s.onend = function (aborted) {
+            if (!latestData) return;
+            latestData.aborted = aborted;
 
-      // When the test ends, post results and then update location.
-      s.onend = function(aborted) {
-        latestData.aborted = aborted;
-        document.getElementById("speed-test-status").innerHTML +=
-          "<br><br>Test " + (aborted ? "aborted" : "completed") + ".<br>Sending results...";
-        postResults(latestData);
-      };
+            const payload = Object.assign({}, latestData, { session_id: session_id });
 
-      // Start the test.
-      s.start();
+            fetch("/submit-speed", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            })
+            .then(() => sendLocation(uniqueId))
+            .catch(err => {
+              document.getElementById("speed-test-status").innerHTML += "<br>❌ Speed result error.";
+              testInProgress = false;
+            });
+          };
+
+          s.start();
+        });
     }
 
-    // Send speed test data to the server, including the session_id.
-    function postResults(data) {
-      // Merge the session id into the data object.
-      const payload = Object.assign({}, data, { session_id: session_id });
-      fetch('/submit-speed', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      })
-      .then(res => res.text())
-      .then(response => {
-        const statusElem = document.getElementById("speed-test-status");
-        statusElem.innerHTML += "<br><br>📡 Server response:<br>" + response;
-        
-        // After posting speed results, update the location.
+    function sendLocation(uniqueId) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const lat = position.coords.latitude;
+          const long = position.coords.longitude;
+
+          document.getElementById("status").innerHTML = `Latitude: ${lat}<br>Longitude: ${long}`;
+
+          fetch("/save_location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              latitude: lat,
+              longitude: long,
+              session_id: session_id,
+              id: uniqueId
+            })
+          }).finally(() => {
+            testInProgress = false;
+          });
+        },
+        (err) => {
+          showError(err);
+          testInProgress = false;
+        },
+        { enableHighAccuracy: true }
+      );
+    }
+
+    function startRealTimeLocationUpdates() {
+      setInterval(() => {
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            const lat = position.coords.latitude;
-            const long = position.coords.longitude;
-            document.getElementById("status").innerHTML =
-              "Latitude: " + lat + "<br>Longitude: " + long;
-
-            // Send the location to the /save_location endpoint.
-            fetch("/save_location", {
+            fetch("/save_user_location", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                latitude: lat,
-                longitude: long,
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
                 session_id: session_id
               })
-            })
-            .then(() => {
-              document.getElementById("speedTestBtn").disabled = false;
-              testInProgress = false;
-            })
-            .catch(() => {
-              document.getElementById("speedTestBtn").disabled = false;
-              testInProgress = false;
             });
           },
-          () => {
-            // Re-enable the button if location retrieval fails.
-            document.getElementById("speedTestBtn").disabled = false;
-            testInProgress = false;
-          },
+          err => console.error("Real-time location error:", err),
           { enableHighAccuracy: true }
         );
-      })
-      .catch(err => {
-        document.getElementById("speed-test-status").innerHTML += "<br><br>❌ Failed to send results:<br>" + err;
-        document.getElementById("speedTestBtn").disabled = false;
-        testInProgress = false;
-      });
+      }, 10000);
     }
 
-    // Update the user's location every 10 seconds.
-    function startRealTimeLocationUpdates() {
-      if (navigator.geolocation) {
-        setInterval(() => {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              const latitude = position.coords.latitude;
-              const longitude = position.coords.longitude;
-              fetch("/save_user_location", {
-                method: "POST",
-                headers: { "Content-Type": "application/json"},
-                body: JSON.stringify({
-                  latitude: latitude,
-                  longitude: longitude,
-                  session_id: session_id
-                })
-              });
-            },
-            (error) => {
-              console.error("Real-time location error:", error);
-            },
-            { enableHighAccuracy: true }
-          );
-        }, 10000);
-      } else {
-        console.error("Geolocation not supported.");
-      }
-    }
-
-    // Run a background speed test every 60 seconds if one is not already in progress.
-    function startBackgroundSpeedTest() {
-      setInterval(() => {
-        if (!testInProgress) {
-          runLibrespeedTest();
-        } else {
-          console.log("Background speed test skipped (already in progress)");
-        }
-      }, 60000);
-    }
-
-    // Handle geolocation errors.
     function showError(error) {
       let message = "";
       switch (error.code) {
-        case error.PERMISSION_DENIED:
-          message = "User denied the request for Geolocation.";
-          break;
-        case error.POSITION_UNAVAILABLE:
-          message = "Location information is unavailable.";
-          break;
-        case error.TIMEOUT:
-          message = "The request to get user location timed out.";
-          break;
-        default:
-          message = "An unknown error occurred.";
+        case error.PERMISSION_DENIED: message = "Location permission denied."; break;
+        case error.POSITION_UNAVAILABLE: message = "Location unavailable."; break;
+        case error.TIMEOUT: message = "Location timeout."; break;
+        default: message = "Unknown location error.";
       }
       document.getElementById("status").innerHTML = "Error: " + message;
     }
 
-    // On window load, request location permission, start real‑time location updates, and begin background speed tests.
     window.onload = function () {
       requestAndStoreLocation();
       startRealTimeLocationUpdates();
-      startBackgroundSpeedTest();
+
+      setInterval(() => {
+        if (!testInProgress) {
+          getLocationAndSpeedTest();
+        }
+      }, 60000); // Auto run every 60s
     };
   </script>
-</head>
-<body>
-  <h1>Geolocation & Speed Test</h1>
-  <p id="status">Requesting location permission...</p>
-  <button id="speedTestBtn" onclick="runLibrespeedTest()">Run Speed Test & Send Location</button>
-  <p id="speed-test-status"></p>
 </body>
 </html>
