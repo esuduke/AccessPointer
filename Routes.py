@@ -15,6 +15,9 @@ class Routes:
         self.session_ids_to_generated_ids = {}
         self.id_lock = threading.Lock()
 
+        self.speed_test_in_progress = {}
+        self.speed_test_status_lock = threading.Lock()   
+
         # Session ID to latest location (lat, lon)
         self.user_sessions = {}
         self.session_lock = threading.Lock()
@@ -30,23 +33,30 @@ class Routes:
             return render_template("index.html")
 
         @self.app.route("/generate_unique_id", methods=["GET"])
-        def generate_unique_id():
-            unique_id = self.generate_id()
-            return jsonify({"id": unique_id})
+        def generate_id_route():
+            session_id = request.args.get("session_id")
+            if not session_id:
+                return jsonify({"error": "Missing session_id"}), 400
+
+            with self.id_lock:
+                new_id = self.generate_id()
+                self.session_ids_to_generated_ids[session_id] = new_id
+            return jsonify({"id": new_id})
 
         @self.app.route("/save_location", methods=["POST"])
         def save_location():
             data = request.json
             latitude = data.get("latitude")
             longitude = data.get("longitude")
-            session_id = data.get("session_id") or data.get("id")  # Accept either key
+            session_id = data.get("session_id") # or data.get("id")  # Accept either key
 
             if not session_id:
-                return "Missing session_id or id", 400
+                return "Missing session_id", 400
 
             # Ensure session_id maps to unique id
             with self.id_lock:
                 current_id = self.session_ids_to_generated_ids.get(session_id)
+
                 if current_id is None:
                     current_id = self.generate_id()
                     self.session_ids_to_generated_ids[session_id] = current_id
@@ -62,7 +72,7 @@ class Routes:
             data = request.get_json(force=True)  # ⬅ forces parsing
             latitude = data.get("latitude")
             longitude = data.get("longitude")
-            session_id = data.get("session_id") or data.get("id")
+            session_id = data.get("session_id")
             # print("save_user_location received:", data)
             if latitude is not None and longitude is not None and session_id is not None:
                 with self.session_lock:
@@ -80,10 +90,10 @@ class Routes:
                 ping = float(data.get("pingStatus"))
             except (TypeError, ValueError):
                 return jsonify({"error": "Invalid speed values"}), 400
-
-            session_id = data.get("session_id") or data.get("id")  # Accept either
+            
+            session_id = data.get("session_id")
             if not session_id:
-                return jsonify({"error": "Missing session_id or id"}), 400
+                return jsonify({"error": "Missing session_id"}), 400
 
             # Ensure ID mapping exists
             with self.id_lock:

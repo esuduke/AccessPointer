@@ -39,7 +39,7 @@
       fetch(`/generate_unique_id?session_id=${session_id}`)
         .then(res => res.json())
         .then(data => {
-          const uniqueId = data.id;
+          const uniqueId = data.id; 
 
           const s = new Speedtest();
           s.setParameter("telemetry_level", "basic");
