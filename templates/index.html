@@ -2,8 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Geolocation & Speed Test</title>
-  <script src="/static/speedtest.js"></script> <!-- Ensure this file exists -->
+  <title>Geolocation & Speed Test Heatmap</title>
+  <script src="/static/speedtest.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
+  <style>
+    /* Basic styling for the heatmap container */
+    #heatmap-container {
+      position: relative;
+      border: 1px solid #ccc; /* Optional border */
+      margin-top: 20px;
+      /* Dimensions MUST match your floor plan image */
+      /* Use Flask variables passed via render_template */
+      width: 1507px;
+      height: 1202px;
+    }
+    #heatmap-container img {
+      display: block; /* Remove extra space below image */
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #heatmap-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      /* Heatmap library will draw here */
+    }
+    /* Optional: Style for the refresh button */
+    #refresh-heatmap-btn {
+        margin-top: 10px;
+    }
+  </style>
 </head>
 <body>
   <h1>Geolocation & Speed Test</h1>
@@ -13,10 +46,112 @@
   <button onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
   <p id="speed-test-status"></p>
 
+  <hr>
+
+  <h2>WiFi Speed Heatmap</h2>
+  <div id="heatmap-container">
+    <img src="/static/Floor1.png" alt="Floor Plan">
+    <div id="heatmap-canvas"></div>
+  </div>
+  <button id="refresh-heatmap-btn" onclick="renderHeatmap()">Refresh Heatmap</button>
+  <p id="heatmap-status"></p>
+
+
   <script>
     const session_id = crypto.randomUUID();
     let testInProgress = false;
+    let heatmapInstance = null; // Variable to hold the heatmap instance
 
+    // --- Heatmap Rendering Function ---
+    function renderHeatmap() {
+        console.log("Attempting to render heatmap..."); // Debug
+        document.getElementById('heatmap-status').innerText = 'Loading heatmap data...';
+
+        // Initialize heatmap.js if it hasn't been already
+        if (!heatmapInstance) {
+            try {
+                console.log("Initializing heatmap.js instance..."); // Debug
+                heatmapInstance = h337.create({
+                    container: document.getElementById('heatmap-canvas'),
+                    // --- Configuration closer to Python script ---
+                    radius: 50,        // Adjust as needed for point influence
+                    maxOpacity: 0.6,   // Matches alpha=0.6
+                    minOpacity: 0,
+                    blur: 0.85,         // Adjust for desired smoothness (0-1)
+                    // Gradient approximating 'coolwarm' (Blue->Cyan->White->Yellow->Red)
+                    gradient: {
+                        '0': '#0000FF',    // Blue (low values)
+                        '0.25': '#00FFFF', // Cyan
+                        '0.5': '#FFFFFF',  // White (mid values)
+                        '0.75': '#FFFF00', // Yellow
+                        '1.0': '#FF0000'   // Red (high values)
+                    }
+                    // --- End Configuration ---
+                });
+                console.log("heatmap.js instance initialized."); // Debug
+            } catch (e) {
+                 document.getElementById('heatmap-status').innerText = 'Error initializing heatmap library. Is heatmap.min.js included?';
+                 console.error("Heatmap initialization error:", e);
+                 return; // Stop if initialization fails
+            }
+        }
+
+        // Fetch data from the backend
+        console.log("Fetching heatmap data from /heatmap-data"); // Debug
+        fetch('/heatmap-data')
+            .then(response => {
+                console.log("Received response from /heatmap-data, Status:", response.status); // Debug
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(heatmapData => {
+                console.log("Parsed heatmap JSON data:", heatmapData); // Debug: Log the actual data
+
+                if (heatmapData.error) {
+                     document.getElementById('heatmap-status').innerText = `Error loading heatmap data: ${heatmapData.error}`;
+                     console.error('Server error fetching heatmap data:', heatmapData.error);
+                     // Clear previous data on error
+                     heatmapInstance.setData({ max: 0, data: [] });
+                     return;
+                }
+
+                // Validate data structure slightly
+                if (!heatmapData || typeof heatmapData.max === 'undefined' || !Array.isArray(heatmapData.data)) {
+                     document.getElementById('heatmap-status').innerText = 'Invalid data format received from server.';
+                     console.error('Invalid heatmap data format:', heatmapData);
+                     heatmapInstance.setData({ max: 0, data: [] }); // Clear invalid data
+                     return;
+                }
+
+
+                if (heatmapData.data.length === 0) {
+                    document.getElementById('heatmap-status').innerText = 'No heatmap data points available yet.';
+                    console.log("No data points received, clearing heatmap."); // Debug
+                    // Clear previous data if no new data
+                    heatmapInstance.setData({ max: 0, data: [] });
+                } else {
+                    // Set the data on the heatmap instance
+                    console.log(`Setting heatmap data: ${heatmapData.data.length} points, Max value: ${heatmapData.max}`); // Debug
+                    heatmapInstance.setData(heatmapData);
+                    document.getElementById('heatmap-status').innerText = `Heatmap updated (${heatmapData.data.length} points). Max speed: ${Number(heatmapData.max).toFixed(2)} Mbps`;
+                    console.log("Heatmap data set successfully."); // Debug
+                }
+            })
+            .catch(error => {
+                document.getElementById('heatmap-status').innerText = 'Failed to fetch or process heatmap data.';
+                console.error('Error fetching/processing heatmap data:', error);
+                 // Clear previous data on fetch error
+                 if (heatmapInstance) {
+                    console.log("Clearing heatmap due to fetch/process error."); // Debug
+                    heatmapInstance.setData({ max: 0, data: [] });
+                 }
+            });
+    }
+
+
+    // --- Geolocation and Speed Test Functions (Unchanged from previous version) ---
     function requestAndStoreLocation() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -35,29 +170,36 @@
       if (testInProgress) return;
       testInProgress = true;
       document.getElementById("speed-test-status").innerHTML = "Running speed test...";
+      document.getElementById("status").innerHTML = "Getting current location for test..."; // Update status
 
+      // 1. Generate ID first
       fetch(`/generate_unique_id?session_id=${session_id}`)
-        .then(res => res.json())
+        .then(res => {
+             if (!res.ok) throw new Error(`Generate ID error: ${res.status}`);
+             return res.json();
+        })
         .then(data => {
-          const uniqueId = data.id; 
+          const uniqueId = data.id;
+          console.log("Generated Unique ID for test:", uniqueId);
 
+          // 2. Run Speed Test
           const s = new Speedtest();
           s.setParameter("telemetry_level", "basic");
-          s.setParameter("getIp_ispInfo", true);
-          s.setParameter("time_dl", 10);
+          // s.setParameter("getIp_ispInfo", true); // Consider if needed
+          s.setParameter("time_dl", 10); // Adjust test times if needed
           s.setParameter("time_ul", 5);
-          s.setSelectedServer({
+          s.setSelectedServer({ // Assuming backend is setup at /backend/ relative paths
             name: "Local Server",
-            server: window.location.origin + "/backend/",
-            dlURL: "garbage",
-            ulURL: "empty",
-            pingURL: "empty",
-            getIpURL: "getIP"
+            server: window.location.origin + "/", // Use origin if Flask handles /backend routes directly
+            dlURL: "backend/garbage",
+            ulURL: "backend/empty",
+            pingURL: "backend/empty",
+            getIpURL: "backend/getIP"
           });
 
           let latestData = null;
           s.onupdate = function (data) {
-            latestData = data;
+            latestData = data; // Store latest speed data
             document.getElementById("speed-test-status").innerHTML =
               `Download: ${data.dlStatus} Mbps<br>` +
               `Upload: ${data.ulStatus} Mbps<br>` +
@@ -66,34 +208,55 @@
           };
 
           s.onend = function (aborted) {
-            if (!latestData) return;
+            if (!latestData) {
+                document.getElementById("speed-test-status").innerHTML += "<br>❌ Speed test failed to get data.";
+                testInProgress = false;
+                return;
+            }
             latestData.aborted = aborted;
+            console.log("Speed test ended. Aborted:", aborted, "Data:", latestData);
 
-            const payload = Object.assign({}, latestData, { session_id: session_id });
-
+            // 3. Submit Speed Results
+            const speedPayload = Object.assign({}, latestData, { session_id: session_id });
             fetch("/submit-speed", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(speedPayload)
             })
-            .then(() => sendLocation(uniqueId))
+            .then(res => {
+                if (!res.ok) throw new Error(`Submit speed error: ${res.status}`);
+                return res.json();
+            })
+            .then(speedSubmitResult => {
+               console.log("Speed results submitted:", speedSubmitResult);
+               // 4. Send Location AFTER speed submit is successful
+               sendLocation(uniqueId); // Pass the generated ID
+            })
             .catch(err => {
-              document.getElementById("speed-test-status").innerHTML += "<br>❌ Speed result error.";
-              testInProgress = false;
+              document.getElementById("speed-test-status").innerHTML += "<br>❌ Error submitting speed results.";
+              console.error("Submit speed error:", err);
+              testInProgress = false; // Allow retrying
             });
           };
 
-          s.start();
+          s.start(); // Start the speed test
+        })
+        .catch(err => {
+            document.getElementById("speed-test-status").innerHTML = "❌ Error starting speed test process (Generate ID failed).";
+            console.error("Generate ID error:", err);
+            testInProgress = false; // Allow retrying
         });
     }
 
-    function sendLocation(uniqueId) {
+    function sendLocation(uniqueId) { // Accept uniqueId generated earlier
+      console.log("Sending location for ID:", uniqueId);
+      document.getElementById("status").innerHTML = "Sending location data...";
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const lat = position.coords.latitude;
           const long = position.coords.longitude;
 
-          document.getElementById("status").innerHTML = `Latitude: ${lat}<br>Longitude: ${long}`;
+          document.getElementById("status").innerHTML = `Location Found: Latitude: ${lat.toFixed(6)}, Longitude: ${long.toFixed(6)}`;
 
           fetch("/save_location", {
             method: "POST",
@@ -101,26 +264,45 @@
             body: JSON.stringify({
               latitude: lat,
               longitude: long,
-              session_id: session_id,
-              id: uniqueId
+              session_id: session_id, // Keep session_id for context if needed
+              id: uniqueId          // Send the correct ID for this test
             })
-          }).finally(() => {
-            testInProgress = false;
+          })
+          .then(res => {
+               if (!res.ok) throw new Error(`Save location error: ${res.status}`);
+               return res.json();
+          })
+          .then(locationResult => {
+              console.log("Location saved:", locationResult);
+              document.getElementById("status").innerHTML += `<br>✅ Location and Speed Test data saved for ID ${uniqueId}.`;
+              // Refresh heatmap after successfully saving new data
+              console.log("Triggering heatmap refresh after saving data."); // Debug
+              renderHeatmap();
+          })
+          .catch(err => {
+              document.getElementById("status").innerHTML += "<br>❌ Error saving location data.";
+              console.error("Save location error:", err);
+          })
+          .finally(() => {
+            testInProgress = false; // Test cycle complete
           });
         },
         (err) => {
-          showError(err);
-          testInProgress = false;
+          showError(err); // Use existing error handler
+          document.getElementById("status").innerHTML += "<br>❌ Could not get location to save.";
+          console.error("Get location error:", err);
+          testInProgress = false; // Allow retrying even if location fails
         },
         { enableHighAccuracy: true }
       );
     }
 
+    // --- Background Location Update (Unchanged) ---
     function startRealTimeLocationUpdates() {
       setInterval(() => {
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            fetch("/save_user_location", {
+            fetch("/save_user_location", { // Still useful for tracking current general location
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -130,12 +312,13 @@
               })
             });
           },
-          err => console.error("Real-time location error:", err),
-          { enableHighAccuracy: true }
+          err => console.warn("Real-time location background update error:", err), // Use warn to reduce console noise
+          { enableHighAccuracy: false } // Low accuracy is fine for background updates
         );
-      }, 10000);
+      }, 30000); // Update less frequently (e.g., every 30s)
     }
 
+    // --- Error Display Function (Unchanged) ---
     function showError(error) {
       let message = "";
       switch (error.code) {
@@ -147,15 +330,15 @@
       document.getElementById("status").innerHTML = "Error: " + message;
     }
 
+    // --- Initial Setup on Page Load ---
     window.onload = function () {
-      requestAndStoreLocation();
-      startRealTimeLocationUpdates();
+      console.log("Window loaded. Initializing..."); // Debug
+      requestAndStoreLocation(); // Ask for permission early
+      startRealTimeLocationUpdates(); // Start background tracking
 
-      setInterval(() => {
-        if (!testInProgress) {
-          getLocationAndSpeedTest();
-        }
-      }, 60000); // Auto run every 60s
+      // Initial heatmap render on load
+      renderHeatmap();
+
     };
   </script>
 </body>
