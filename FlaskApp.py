@@ -1,6 +1,8 @@
 # FlaskApp.py
 import threading
 import time # <-- Import time
+import logging # <-- Import logging
+import re # <-- Import re for parsing log messages
 from flask import Flask
 # from Routes import Routes # setup_routes returns the instance now
 from Routes import setup_routes # <-- Import setup_routes instead
@@ -14,9 +16,80 @@ SESSION_TIMEOUT_SECONDS = 1800 # e.g., 30 minutes
 CLEANUP_INTERVAL_SECONDS = 300 # e.g., Check every 5 minutes
 # --- End Configuration ---
 
+# --- Logging Configuration ---
+class RequestPathFilter(logging.Filter):
+    """A logging filter that blocks records for specific request paths."""
+    def __init__(self, paths_to_block=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Ensure paths start with / for matching
+        self.paths_to_block = [p if p.startswith('/') else f'/{p}' for p in (paths_to_block or [])]
+        # Simple regex to capture METHOD /path HTTP/version" STATUS ..."
+        self.log_pattern = re.compile(r'\"(GET|POST|PUT|DELETE|HEAD|OPTIONS)\s+([^?\s]+).*?\"')
+
+    def filter(self, record):
+        log_message = record.getMessage()
+        match = self.log_pattern.search(log_message)
+
+        if match:
+            # We found a pattern that looks like a request log
+            # method = match.group(1) # GET, POST, etc. - not currently used for filtering
+            path = match.group(2)    # The path part (e.g., /get-live-location/some-id)
+
+            # Check if the extracted path starts with any of the paths we want to block
+            for blocked_path_prefix in self.paths_to_block:
+                 # Handle paths like /get-live-location/<session_id>
+                 # Check if the extracted path starts with the blocked prefix
+                 # (e.g., /get-live-location/xyz starts with /get-live-location)
+                 # Need to handle the base path case (e.g. /save_user_location exactly)
+                 if path == blocked_path_prefix or path.startswith(blocked_path_prefix + '/'):
+                    return False # Don't log this record
+
+        # If it's not a request log or doesn't match a blocked path, allow it
+        return True
+
+def configure_logging(app, paths_to_block):
+    """Configures logging to filter out specific paths."""
+    # Configure Werkzeug logger
+    werkzeug_logger = logging.getLogger('werkzeug')
+    # Make sure Werkzeug logs are not propagated to the root logger
+    # if you have other handlers configured there.
+    werkzeug_logger.propagate = False
+    werkzeug_logger.setLevel(logging.INFO) # Or desired level
+
+    # Remove existing handlers to avoid duplicate logs if script is re-run
+    # Be cautious if you have other custom handlers on this logger
+    for handler in werkzeug_logger.handlers[:]:
+         werkzeug_logger.removeHandler(handler)
+
+    # Add a new handler (e.g., StreamHandler to see logs in console)
+    console_handler = logging.StreamHandler()
+    # Optional: Set a formatter if needed
+    # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # console_handler.setFormatter(formatter)
+
+    # Add our custom filter to the handler
+    console_handler.addFilter(RequestPathFilter(paths_to_block))
+    werkzeug_logger.addHandler(console_handler)
+
+    # Optional: Configure Flask's default logger if needed (usually less verbose)
+    # app.logger.setLevel(logging.INFO) # Or desired level
+
+# --- End Logging Configuration ---
+
+
 class FlaskApp:
     def __init__(self):
         self.app = Flask(__name__)
+        # Configure logging before running the app
+        # Pass only the base paths without '<...>' placeholders
+        # UPDATED: Added /backend/garbage and /backend/empty
+        configure_logging(self.app, [
+            '/save_user_location',
+            '/get-live-location',
+            '/backend/garbage',
+            '/backend/empty'
+        ])
+
         # self.tunnel = NgrokTunnel() # Keep if used
         # self.sender = EmailSender() # Keep if used
         # Use the setup_routes function which returns the Routes instance
@@ -47,10 +120,13 @@ class FlaskApp:
         print(f" * Flask app starting on port {port}")
         # Make sure cert.pem and key.pem exist or remove ssl_context for HTTP
         try:
-            self.app.run(host='0.0.0.0', port=port, ssl_context=('cert.pem', 'key.pem')) # Commented out SSL for now
+            # Note: Running with debug=True might override some logging settings.
+            # Run without debug for production or testing logging filters.
+            self.app.run(host='0.0.0.0', port=port, ssl_context=('cert.pem', 'key.pem'), debug=False)
         except FileNotFoundError:
              print("\n*** Warning: cert.pem or key.pem not found. Running without HTTPS. ***\n")
-             self.app.run(host='0.0.0.0', port=port)
+             # Run without debug for production or testing logging filters.
+             self.app.run(host='0.0.0.0', port=port, debug=False)
 
 
     def listen_for_input(self):
@@ -88,7 +164,9 @@ class FlaskApp:
                 if lat is not None and long is not None:
                      # Get timestamp too for display if desired
                      with self.routes_instance.session_lock:
-                          _, last_seen = self.routes_instance.user_sessions.get(selected_sid, ((None, None), 0))
+                          # Ensure the session data has the expected structure (tuple of 3 elements)
+                          session_data = self.routes_instance.user_sessions.get(selected_sid)
+                          last_seen = session_data[2] if session_data and len(session_data) == 3 else 0
                      last_seen_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_seen)) if last_seen else "N/A"
                      print(f"Session {selected_sid} -> Latitude: {lat}, Longitude: {long} (Last seen: {last_seen_str})")
                 else:
