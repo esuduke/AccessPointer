@@ -244,18 +244,20 @@
     }
     
     /* Heatmap container styling */
-    #heatmap-container {
-      position: relative;
-      border: 2px solid var(--primary);
-      margin: 20px auto;
-      width: calc(0.4 * 1500px);
-      height: calc(0.4 * 1200px);
-      overflow: hidden;
-      max-width: 100%;
-      border-radius: var(--border-radius);
-      box-shadow: var(--box-shadow);
-      transition: all 0.3s ease;
-    }
+/* Heatmap container styling - RESPONSIVE */
+#heatmap-container {
+  position: relative;
+  border: 2px solid var(--primary);
+  margin: 20px auto;
+  width: 100%;
+  max-width: 800px;
+  /* Use aspect ratio to maintain proportions based on original floor plan */
+  aspect-ratio: 1.25; /* 1500:1200 = 1.25:1 */
+  overflow: hidden;
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  transition: all 0.3s ease;
+}
     
     #heatmap-container:hover {
       box-shadow: 0 8px 24px rgba(199, 0, 57, 0.2);
@@ -263,6 +265,14 @@
     }
     
     /* For the mobile view, we'll make the heatmap responsive */
+    @media (max-width: 1550px) {
+      #heatmap-container {
+        width: 100%;
+        height: 0;
+        padding-bottom: 80%;
+      }
+    }
+
     @media (max-width: 1550px) {
       #heatmap-container {
         width: 100%;
@@ -287,13 +297,14 @@
     }
     
     #heatmap-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      border-radius: calc(var(--border-radius) - 2px);
-    }
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--border-radius) - 2px);
+  z-index: 5;
+}
     
     /* Style for the live location dot with animation */
     #live-dot {
@@ -503,6 +514,64 @@
     let runTestButton = null;           // Reference to the button
     let autoTestInterval = null;        // Stores the ID for the automatic test interval
     let loadingElements = document.querySelectorAll('.loading');
+    
+    // Store dimensions for the client
+    let clientDimensions = {
+      width: window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth,
+      height: window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight,
+      screen: {
+        width: window.screen.width,
+        height: window.screen.height
+      }
+    };
+
+    // --- Send client dimensions to server ---
+    function sendClientDimensions() {
+      // Get heatmap container dimensions
+      const heatmapContainer = document.getElementById('heatmap-container');
+      const containerRect = heatmapContainer.getBoundingClientRect();
+      
+      // Update client dimensions
+      clientDimensions.container = {
+        width: containerRect.width,
+        height: containerRect.height
+      };
+      
+      // Log dimensions for debugging
+      console.log("Client dimensions:", clientDimensions);
+      
+      // Send to server
+      fetch('/set-client-dimensions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: session_id,
+          dimensions: clientDimensions
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log("Dimensions saved on server:", data);
+      })
+      .catch(error => {
+        console.error("Error sending dimensions:", error);
+      });
+    }
+
+    // --- Update dimensions on resize ---
+    function updateDimensions() {
+      clientDimensions.width = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
+      clientDimensions.height = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight;
+      
+      const heatmapContainer = document.getElementById('heatmap-container');
+      const containerRect = heatmapContainer.getBoundingClientRect();
+      clientDimensions.container = {
+        width: containerRect.width,
+        height: containerRect.height
+      };
+      
+      sendClientDimensions();
+    }
 
     // --- Update Metric Display Function ---
     function updateMetricDisplay(download, upload, ping, jitter) {
@@ -526,142 +595,186 @@
 
     // --- Heatmap Rendering Function ---
     function renderHeatmap() {
-        console.log("Attempting to render heatmap...");
-        document.getElementById('heatmap-status').innerText = 'Loading heatmap data...';
-        toggleLoading(true);
+      console.log("Attempting to render heatmap...");
+      document.getElementById('heatmap-status').innerText = 'Loading heatmap data...';
+      toggleLoading(true);
 
-        // Initialize heatmap instance if it doesn't exist
-        if (!heatmapInstance) {
-            try {
-                heatmapInstance = h337.create({
-                    container: document.getElementById('heatmap-canvas'),
-                    radius: 150,        // Influence radius of each point
-                    maxOpacity: 0.7,   // Increased opacity for better contrast
-                    minOpacity: 0,     // Min opacity (0-1)
-                    blur: 0.92,        // Blurring effect (0-1)
-                    // Gradient with better contrast between red and white
-                    gradient: { '0':'#0000FF', '0.25':'#00FFFF', '0.5':'#FFFFFF', '0.75':'#FFFF00', '1.0':'#FF0000' }
-                });
-                console.log("Heatmap instance initialized.");
-            } catch (e) {
-                 document.getElementById('heatmap-status').innerText = 'Error initializing heatmap library.';
-                 console.error("Heatmap init error:", e);
-                 toggleLoading(false);
-                 return;
-            }
+      // Get the current dimensions of the heatmap container
+      const heatmapContainer = document.getElementById('heatmap-container');
+      const containerRect = heatmapContainer.getBoundingClientRect();
+      const containerWidth = containerRect.width;
+      const containerHeight = containerRect.height;
+
+      console.log(`Heatmap container dimensions: ${containerWidth}px × ${containerHeight}px`);
+      
+      // Update client dimensions with current container size
+      clientDimensions.container = {
+        width: containerWidth,
+        height: containerHeight
+      };
+      
+      // Send updated dimensions
+      sendClientDimensions();
+      
+      // Initialize or recreate heatmap instance with current dimensions
+      try {
+        // Remove previous heatmap canvas if it exists
+        const heatmapCanvas = document.getElementById('heatmap-canvas');
+        while (heatmapCanvas.firstChild) {
+          heatmapCanvas.removeChild(heatmapCanvas.firstChild);
         }
+            
+        // Create new heatmap instance
+        heatmapInstance = h337.create({
+          container: heatmapCanvas,
+          radius: Math.max(30, Math.min(containerWidth, containerHeight) / 15), // Responsive radius
+          maxOpacity: 0.7,
+          minOpacity: 0.15,
+          blur: 1,
+          gradient: { '0':'#0000FF', '0.25':'#00FFFF', '0.5':'#FFFFFF', '0.75':'#FFFF00', '1.0':'#FF0000' }
+        });
+        console.log("Heatmap instance initialized with responsive settings.");
+      } catch (e) {
+        document.getElementById('heatmap-status').innerText = 'Error initializing heatmap library.';
+        console.error("Heatmap init error:", e);
+        toggleLoading(false);
+        return;
+      }
 
-        // Fetch heatmap data from the backend
-        fetch('/heatmap-data')
-            .then(response => {
-                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
-                return response.json();
-            })
-            .then(heatmapData => {
-                // Handle potential errors returned from the backend
-                if (heatmapData.error) {
-                     document.getElementById('heatmap-status').innerText = `Error loading heatmap data: ${heatmapData.error}`;
-                     console.error('Server error fetching heatmap data:', heatmapData.error);
-                     heatmapInstance.setData({ max: 0, data: [] }); // Clear heatmap on error
-                     toggleLoading(false);
-                     return;
-                }
-                // Validate the received data structure
-                if (!heatmapData || typeof heatmapData.max === 'undefined' || !Array.isArray(heatmapData.data)) {
-                     document.getElementById('heatmap-status').innerText = 'Invalid data format received from server.';
-                     console.error('Invalid heatmap data format:', heatmapData);
-                     heatmapInstance.setData({ max: 0, data: [] }); // Clear invalid data
-                     toggleLoading(false);
-                     return;
-                }
+      // Fetch heatmap data from the backend
+      fetch(`/heatmap-data?session_id=${session_id}`)
+        .then(response => {
+          if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+          return response.json();
+        })
+        .then(heatmapData => {
+          // Handle potential errors returned from the backend
+          if (heatmapData.error) {
+            document.getElementById('heatmap-status').innerText = `Error loading heatmap data: ${heatmapData.error}`;
+            console.error('Server error fetching heatmap data:', heatmapData.error);
+            heatmapInstance.setData({ max: 0, data: [] }); // Clear heatmap on error
+            toggleLoading(false);
+            return;
+          }
+                
+          // Validate the received data structure
+          if (!heatmapData || typeof heatmapData.max === 'undefined' || !Array.isArray(heatmapData.data)) {
+            document.getElementById('heatmap-status').innerText = 'Invalid data format received from server.';
+            console.error('Invalid heatmap data format:', heatmapData);
+            heatmapInstance.setData({ max: 0, data: [] }); // Clear invalid data
+            toggleLoading(false);
+            return;
+          }
 
-                // Update heatmap with data or clear if no data points
-                if (heatmapData.data.length === 0) {
-                    document.getElementById('heatmap-status').innerText = 'No heatmap data points available yet.';
-                    heatmapInstance.setData({ max: 0, data: [] }); // Clear if no data
-                } else {
-                    heatmapInstance.setData(heatmapData); // Set the data points
-                    document.getElementById('heatmap-status').innerText = `Heatmap updated (${heatmapData.data.length} points). Max speed: ${Number(heatmapData.max).toFixed(2)} Mbps`;
-                }
-                toggleLoading(false);
-            })
-            .catch(error => {
-                // Handle network errors or JSON parsing errors
-                document.getElementById('heatmap-status').innerText = 'Failed to fetch or process heatmap data.';
-                console.error('Error fetching/processing heatmap data:', error);
-                if (heatmapInstance) {
-                    heatmapInstance.setData({ max: 0, data: [] }); // Clear heatmap on fetch error
-                }
-                toggleLoading(false);
-            });
+          // Update heatmap with data or clear if no data points
+          if (heatmapData.data.length === 0) {
+            document.getElementById('heatmap-status').innerText = 'No heatmap data points available yet.';
+            heatmapInstance.setData({ max: 0, data: [] }); // Clear if no data
+          } else {
+            // Points should already be scaled on the server side
+            heatmapInstance.setData(heatmapData); // Set the data points
+            document.getElementById('heatmap-status').innerText = 
+              `Heatmap updated (${heatmapData.data.length} points). Max speed: ${Number(heatmapData.max).toFixed(2)} Mbps`;
+          }
+          toggleLoading(false);
+        })
+        .catch(error => {
+          // Handle network errors or JSON parsing errors
+          document.getElementById('heatmap-status').innerText = 'Failed to fetch or process heatmap data.';
+          console.error('Error fetching/processing heatmap data:', error);
+          if (heatmapInstance) {
+            heatmapInstance.setData({ max: 0, data: [] }); // Clear heatmap on fetch error
+          }
+          toggleLoading(false);
+        });
     }
 
     // --- Function to Update Live Dot Position & Color ---
     function updateLiveDotPosition() {
-        // Get the dot element reference if we don't have it
+      // Get the dot element reference if we don't have it
+      if (!liveDotElement) {
+        liveDotElement = document.getElementById('live-dot');
+        // If it still can't be found, stop trying
         if (!liveDotElement) {
-            liveDotElement = document.getElementById('live-dot');
-            // If it still can't be found, stop trying
-            if (!liveDotElement) {
-                 console.error("Live dot element not found! Stopping updates.");
-                 if (liveLocationInterval) clearInterval(liveLocationInterval);
-                 return;
-            }
+          console.error("Live dot element not found! Stopping updates.");
+          if (liveLocationInterval) clearInterval(liveLocationInterval);
+          return;
         }
-        const liveDotStatus = document.getElementById('live-dot-status');
-        const heatmapContainer = document.getElementById('heatmap-container');
+      }
+      
+      const liveDotStatus = document.getElementById('live-dot-status');
+      const heatmapContainer = document.getElementById('heatmap-container');
+      const containerRect = heatmapContainer.getBoundingClientRect();
+      
+      // Update container dimensions if changed
+      if (clientDimensions.container.width !== containerRect.width || 
+          clientDimensions.container.height !== containerRect.height) {
+        clientDimensions.container = {
+          width: containerRect.width,
+          height: containerRect.height
+        };
+        // Send updated dimensions
+        sendClientDimensions();
+      }
 
-        // Fetch the latest live location from the backend
-        fetch(`/get-live-location/${session_id}`)
-            .then(response => {
-                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
-                return response.json();
-            })
-            .then(locationData => {
-                // Check if location was found and successfully mapped
-                if (locationData && locationData.found === true && locationData.x !== undefined && locationData.y !== undefined) {
-                    // Get container dimensions
-                    const containerRect = heatmapContainer.getBoundingClientRect();
-                    const containerWidth = containerRect.width;
-                    const containerHeight = containerRect.height;
+      // Fetch the latest live location from the backend
+      fetch(`/get-live-location/${session_id}`)
+        .then(response => {
+          if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+          return response.json();
+        })
+        .then(locationData => {
+          // Check if location was found and successfully mapped
+          if (locationData && locationData.found === true && locationData.x !== undefined && locationData.y !== undefined) {
+            // Coordinates should be pre-scaled for our container on the server
+            let xPos = locationData.x;
+            let yPos = locationData.y;
                     
-                    // Calculate position as percentage of container dimensions
-                    let xPos = locationData.x;
-                    let yPos = locationData.y;
-                    
-                    // Ensure the dot stays within bounds of the container
-                    xPos = Math.max(6, Math.min(xPos, containerWidth - 6));
-                    yPos = Math.max(6, Math.min(yPos, containerHeight - 6));
-                    
-                    // Position the dot
-                    liveDotElement.style.left = `${xPos}px`;
-                    liveDotElement.style.top = `${yPos}px`;
+            // Position the dot
+            liveDotElement.style.left = `${xPos}px`;
+            liveDotElement.style.top = `${yPos}px`;
 
-                    // Set color and status based on whether the original point was in bounds
-                    if (locationData.in_bounds) {
-                        liveDotElement.style.backgroundColor = 'blue';
-                        liveDotElement.classList.remove('out-of-bounds');
-                        if(liveDotStatus) liveDotStatus.innerText = `Live location: (${Math.round(xPos)}, ${Math.round(yPos)}) [In Bounds]`;
-                    } else {
-                        liveDotElement.style.backgroundColor = 'red';
-                        liveDotElement.classList.add('out-of-bounds');
-                        if(liveDotStatus) liveDotStatus.innerText = `Live location: (${Math.round(xPos)}, ${Math.round(yPos)}) [OUT OF BOUNDS - Clamped]`;
-                    }
-                    // Make the dot visible
-                    liveDotElement.style.display = 'block';
-                } else {
-                    // Hide the dot if location data isn't available or mapping failed
-                    liveDotElement.style.display = 'none';
-                    if(liveDotStatus) liveDotStatus.innerText = `Live location not available (${locationData.reason || 'unknown reason'}).`;
-                }
-            })
-            .catch(error => {
-                // Handle errors during the fetch
-                console.error('Error fetching live location:', error);
-                if (liveDotElement) liveDotElement.style.display = 'none'; // Hide dot on error
-                if(liveDotStatus) liveDotStatus.innerText = 'Error updating live location.';
-            });
+            // Set color and status based on whether the original point was in bounds
+            if (locationData.in_bounds) {
+              liveDotElement.style.backgroundColor = 'blue';
+              liveDotElement.classList.remove('out-of-bounds');
+              if(liveDotStatus) liveDotStatus.innerText = `Live location: (${Math.round(locationData.orig_x)}, ${Math.round(locationData.orig_y)}) [In Bounds]`;
+            } else {
+              liveDotElement.style.backgroundColor = 'red';
+              liveDotElement.classList.add('out-of-bounds');
+              if(liveDotStatus) liveDotStatus.innerText = `Live location: (${Math.round(locationData.orig_x)}, ${Math.round(locationData.orig_y)}) [OUT OF BOUNDS]`;
+            }
+            // Make the dot visible
+            liveDotElement.style.display = 'block';
+          } else {
+            // Hide the dot if location data isn't available or mapping failed
+            liveDotElement.style.display = 'none';
+            if(liveDotStatus) liveDotStatus.innerText = `Live location not available (${locationData.reason || 'unknown reason'}).`;
+          }
+        })
+        .catch(error => {
+          // Handle errors during the fetch
+          console.error('Error fetching live location:', error);
+          if (liveDotElement) liveDotElement.style.display = 'none'; // Hide dot on error
+          if(liveDotStatus) liveDotStatus.innerText = 'Error updating live location.';
+        });
     }
+
+    // --- Resize handler for responsive updates ---
+    let resizeTimeout;
+    window.addEventListener('resize', function() {
+      // Debounce the resize event to avoid excessive updates
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(function() {
+        // Update dimensions and send to server
+        updateDimensions();
+        
+        // Re-render heatmap with updated container dimensions
+        if (heatmapInstance) {
+          renderHeatmap();
+        }
+      }, 250); // Wait for 250ms after resizing stops
+    });
 
     // --- Geolocation Permission Request ---
     function requestAndStoreLocation() {
@@ -757,7 +870,7 @@
             console.log("Speed test ended:", latestData);
 
             // 3. Submit speed results to backend
-             // Convert "Fail" strings to 0 or handle appropriately
+            // Convert "Fail" strings to 0 or handle appropriately
             const speedPayload = {
                 dlStatus: latestData.dlStatus === "Fail" ? 0 : parseFloat(latestData.dlStatus || 0),
                 ulStatus: latestData.ulStatus === "Fail" ? 0 : parseFloat(latestData.ulStatus || 0),
@@ -825,7 +938,8 @@
               latitude: lat,
               longitude: long,
               session_id: session_id, // Include session ID for context if needed
-              id: uniqueId          // Send the correct ID associated with the speed test
+              id: uniqueId,         // Send the correct ID associated with the speed test
+              dimensions: clientDimensions // Send current client dimensions
             })
           })
           .then(res => { if (!res.ok) throw new Error(`Save location error: ${res.statusText || res.status}`); return res.json(); })
@@ -861,7 +975,6 @@
 
     // --- Background Location Update (Sends data for live tracking) ---
     function startRealTimeLocationUpdates() {
-      // Note: interval changed from 10s to 1s in previous steps
       console.log("Starting background location updates (every 1s)");
       // Set interval to send location updates periodically
       setInterval(() => {
@@ -874,15 +987,14 @@
               body: JSON.stringify({
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
-                session_id: session_id // Send the session ID
+                session_id: session_id, // Send the session ID
+                dimensions: clientDimensions // Send current client dimensions
               })
             }).catch(err => console.warn("Background location send failed:", err)); // Log but don't stop interval
           },
           err => console.warn("Real-time location background update error:", err), // Log errors
-          // Note: maximumAge reverted to default (0) from user provided code
           { enableHighAccuracy: true, timeout: 5000 } // Use high accuracy, add timeout
         );
-      // Note: interval changed from 10000ms to 1000ms in previous steps
       }, 1000); // Send update every 1 second
     }
 
@@ -920,20 +1032,32 @@
         }, 300 + (index * 150));
       });
       
-      requestAndStoreLocation();       // Request permission
-      startRealTimeLocationUpdates();  // Start sending background location updates
-      renderHeatmap();                // Render initial heatmap
-
-      // Start polling for the live location periodically
-      liveLocationInterval = setInterval(updateLiveDotPosition, 1000); // Fetch & update dot every 1s
-      updateLiveDotPosition();          // Update dot position immediately on load
-
-      // Start automatic speed test interval (every 60 seconds)
-      console.log("Setting up automatic speed test every 60 seconds.");
-      autoTestInterval = setInterval(() => {
-          // Call getLocationAndSpeedTest (isAuto flag is still passed for logging, but not needed for button logic)
+      // Log screen and window dimensions
+      console.log("Screen size:", window.screen.width, "x", window.screen.height);
+      console.log("Window size:", window.innerWidth, "x", window.innerHeight);
+      
+      // Capture initial container dimensions and send to server
+      setTimeout(() => {
+        updateDimensions();
+        
+        // Now that dimensions are sent, proceed with initialization
+        requestAndStoreLocation();       // Request permission
+        startRealTimeLocationUpdates();  // Start sending background location updates
+        
+        // Render heatmap after a short delay to ensure container is fully rendered
+        setTimeout(() => {
+          renderHeatmap();              // Render initial heatmap
+        }, 500);
+        
+        // Start polling for the live location periodically
+        liveLocationInterval = setInterval(updateLiveDotPosition, 1000); // Fetch & update dot every 1s
+        
+        // Start automatic speed test interval (every 60 seconds)
+        console.log("Setting up automatic speed test every 60 seconds.");
+        autoTestInterval = setInterval(() => {
           getLocationAndSpeedTest(true);
-      }, 60000); // 60000 ms = 1 minute
+        }, 60000); // 60000 ms = 1 minute
+      }, 300); // Short delay to ensure DOM is ready
     };
   </script>
 </body>
