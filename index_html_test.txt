@@ -3,144 +3,274 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WiFi Speed Heatmap</title>
+  <title>Access Pointer</title>
+  <script src="/static/speedtest.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <script src="/static/speedtest.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
   <style>
-    /* Reset and base styles */
+    :root {
+      --primary: #C70039;
+      --primary-dark: #900029;
+      --white: #FFFFFF;
+      --light-gray: #f8f8f8;
+      --gray: #e0e0e0;
+      --dark-gray: #888888;
+      --border-radius: 16px;
+      --box-shadow: 0 4px 12px rgba(199, 0, 57, 0.1);
+    }
+    
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      font-family: 'Outfit', sans-serif;
     }
     
     body {
-      font-family: 'Outfit', sans-serif;
-      background-color: #FFFFFF;
+      background-color: var(--light-gray);
       color: #333;
-      line-height: 1.6;
-    }
-
-    /* Container */
-    .container {
-      width: 100%;
-      max-width: 1200px;
+      padding: 0;
+      max-width: 1600px;
       margin: 0 auto;
-      padding: 0 20px;
     }
-
-    /* Header */
-    header {
-      background-color: #C70039;
-      color: white;
-      padding: 1.5rem 0;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    }
-
-    header .container {
+    
+    /* New navigation bar */
+    .navbar {
+      background-color: var(--primary);
+      color: var(--white);
+      padding: 12px 20px;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
-
-    .logo h1 {
-      font-weight: 600;
-      font-size: 1.8rem;
-      margin: 0;
-    }
-
-    /* Main content */
-    main {
-      padding: 2rem 0;
-    }
-
-    .section-title {
-      color: #C70039;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
+    
+    .navbar-logo {
       font-size: 1.5rem;
-      position: relative;
-      padding-bottom: 0.5rem;
+      font-weight: 700;
+      color: var(--white);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
     }
-
-    .section-title::after {
+    
+    .logo-icon {
+      margin-right: 8px;
+      font-size: 1.2em;
+    }
+    
+    .content-wrapper {
+      padding: 20px;
+    }
+    
+    h1, h2 {
+      color: var(--primary);
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-top: 1rem;
+    }
+    
+    h2 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      margin-top: 2rem;
+    }
+    
+    .container {
+      background-color: var(--white);
+      border-radius: var(--border-radius);
+      padding: 24px;
+      margin-bottom: 2rem;
+      box-shadow: var(--box-shadow);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .container:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 24px rgba(199, 0, 57, 0.15);
+    }
+    
+    .status-container {
+      background-color: var(--light-gray);
+      border-radius: var(--border-radius);
+      padding: 16px;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      border: 1px solid var(--gray);
+    }
+    
+    #status, #speed-test-status, #heatmap-status, #live-dot-status {
+      font-size: 1rem;
+      line-height: 1.5;
+      color: #333;
+      margin-bottom: 0.75rem;
+    }
+    
+    button {
+      background-color: var(--primary);
+      color: var(--white);
+      border: none;
+      border-radius: 30px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: block;
+      margin: 1.25rem auto;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    button:before {
       content: '';
       position: absolute;
-      left: 0;
-      bottom: 0;
-      width: 50px;
-      height: 3px;
-      background-color: #C70039;
-    }
-
-    .status-card {
-      background-color: #f8f8f8;
-      border-radius: 10px;
-      padding: 1.5rem;
-      margin-bottom: 2rem;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    }
-
-    #status {
-      margin-bottom: 1rem;
-      font-weight: 500;
-    }
-
-    .btn {
-      background-color: #C70039;
-      color: white;
-      border: none;
-      padding: 0.8rem 1.5rem;
-      border-radius: 5px;
-      cursor: pointer;
-      font-family: 'Outfit', sans-serif;
-      font-weight: 500;
-      transition: background-color 0.3s;
-    }
-
-    .btn:hover {
-      background-color: #A50030;
-    }
-
-    .btn:disabled {
-      background-color: #888;
-      cursor: not-allowed;
-    }
-
-    #speed-test-status {
-      margin-top: 1rem;
-      line-height: 1.8;
-    }
-
-    /* Heatmap container */
-    .heatmap-section {
-      margin-top: 3rem;
-    }
-
-    .heatmap-wrapper {
-      position: relative;
-      width: 100%;
-      padding-bottom: 100%; /* Creates a square aspect ratio */
-      margin-bottom: 1.5rem;
-      border-radius: 10px;
-      overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-      background-color: #f0f0f0;
-      border: 2px solid #C70039;
-    }
-
-    #heatmap-container {
-      position: absolute;
       top: 0;
-      left: 0;
+      left: -100%;
       width: 100%;
       height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: all 0.6s ease;
+    }
+    
+    button:hover:before {
+      left: 100%;
+    }
+    
+    button:hover {
+      background-color: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(199, 0, 57, 0.3);
+    }
+    
+    button:disabled {
+      background-color: var(--dark-gray);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    
+    button:disabled:before {
+      display: none;
+    }
+    
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      margin: 2rem auto;
+      width: 90%;
+      max-width: 600px;
+    }
+    
+    /* The important speed metrics display */
+    .speed-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin: 1.5rem auto;
+      max-width: 600px;
+    }
+    
+    .metric-card {
+      background-color: var(--white);
+      border-radius: var(--border-radius);
+      padding: 20px;
+      text-align: center;
+      border: 2px solid var(--primary);
+      transition: all 0.3s ease;
+      box-shadow: var(--box-shadow);
+      position: relative;
       overflow: hidden;
     }
-
+    
+    .metric-card:after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(199, 0, 57, 0.1) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      pointer-events: none;
+    }
+    
+    .metric-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 12px 24px rgba(199, 0, 57, 0.2);
+    }
+    
+    .metric-card:hover:after {
+      opacity: 1;
+    }
+    
+    .metric-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--primary);
+      margin: 0.5rem 0;
+      transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover .metric-value {
+      transform: scale(1.1);
+    }
+    
+    .metric-label {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #555;
+    }
+    
+    .metric-unit {
+      font-size: 0.9rem;
+      color: var(--dark-gray);
+      transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover .metric-unit {
+      color: var(--primary);
+    }
+    
+    /* Heatmap container styling */
+    #heatmap-container {
+      position: relative;
+      border: 2px solid var(--primary);
+      margin: 20px auto;
+      width: calc(0.4 * 1500px);
+      height: calc(0.4 * 1200px);
+      overflow: hidden;
+      max-width: 100%;
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      transition: all 0.3s ease;
+    }
+    
+    #heatmap-container:hover {
+      box-shadow: 0 8px 24px rgba(199, 0, 57, 0.2);
+      transform: scale(1.01);
+    }
+    
+    /* For the mobile view, we'll make the heatmap responsive */
+    @media (max-width: 1550px) {
+      #heatmap-container {
+        width: 100%;
+        height: 0;
+        padding-bottom: 80%;
+      }
+    }
+    
     #heatmap-container img {
       display: block;
       position: absolute;
@@ -148,17 +278,24 @@
       left: 0;
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      border-radius: calc(var(--border-radius) - 2px);
+      transition: all 1s ease;
     }
-
+    
+    #heatmap-container:hover img {
+      filter: brightness(1.05);
+    }
+    
     #heatmap-canvas {
       position: absolute;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
+      border-radius: calc(var(--border-radius) - 2px);
     }
-
+    
+    /* Style for the live location dot with animation */
     #live-dot {
       position: absolute;
       width: 12px;
@@ -169,92 +306,192 @@
       transform: translate(-50%, -50%);
       display: none;
       z-index: 10;
-      box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+      box-shadow: 0 0 10px rgba(0, 0, 255, 0.5);
+      animation: pulse 2s infinite;
     }
-
+    
+    /* Pulse animation for the dot */
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(0, 0, 255, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(0, 0, 255, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(0, 0, 255, 0);
+      }
+    }
+    
+    /* Style for out-of-bounds dot */
     #live-dot.out-of-bounds {
       background-color: red;
+      animation: pulse-red 2s infinite;
     }
-
-    .status-text {
-      font-size: 0.9rem;
-      color: #666;
-      margin-top: 0.5rem;
+    
+    @keyframes pulse-red {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(255, 0, 0, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0);
+      }
     }
-
-    /* Footer */
-    footer {
-      background-color: #C70039;
-      color: white;
-      padding: 1.5rem 0;
-      margin-top: 3rem;
+    
+    /* Loading animation */
+    .loading {
+      display: inline-block;
+      position: relative;
+      width: 80px;
+      height: 20px;
+      margin: 0 auto;
     }
-
-    footer p {
-      text-align: center;
-      font-size: 0.9rem;
+    
+    .loading div {
+      position: absolute;
+      top: 8px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--primary);
+      animation-timing-function: cubic-bezier(0, 1, 1, 0);
     }
-
-    /* Responsive adjustments */
+    
+    .loading div:nth-child(1) {
+      left: 8px;
+      animation: loading1 0.6s infinite;
+    }
+    
+    .loading div:nth-child(2) {
+      left: 8px;
+      animation: loading2 0.6s infinite;
+    }
+    
+    .loading div:nth-child(3) {
+      left: 32px;
+      animation: loading2 0.6s infinite;
+    }
+    
+    .loading div:nth-child(4) {
+      left: 56px;
+      animation: loading3 0.6s infinite;
+    }
+    
+    @keyframes loading1 {
+      0% { transform: scale(0); }
+      100% { transform: scale(1); }
+    }
+    
+    @keyframes loading2 {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(24px, 0); }
+    }
+    
+    @keyframes loading3 {
+      0% { transform: scale(1); }
+      100% { transform: scale(0); }
+    }
+    
     @media (max-width: 768px) {
-      header .container {
-        flex-direction: column;
-        text-align: center;
+      .navbar {
+        padding: 10px 16px;
       }
-
-      .logo h1 {
-        margin-bottom: 1rem;
+      
+      .content-wrapper {
+        padding: 12px;
       }
-
-      .heatmap-wrapper {
-        padding-bottom: 100%; /* Maintain square aspect on mobile */
+      
+      h1 {
+        font-size: 1.8rem;
+      }
+      
+      h2 {
+        font-size: 1.5rem;
+      }
+      
+      .container {
+        padding: 16px;
+      }
+      
+      .speed-metrics {
+        grid-template-columns: 1fr;
+      }
+      
+      button {
+        width: 100%;
+        max-width: 300px;
       }
     }
   </style>
 </head>
 <body>
-  <header>
+  <nav class="navbar">
+    <a href="#" class="navbar-logo">
+      <span class="logo-icon"></span>
+      Access Pointer
+    </a>
+  </nav>
+  
+  <div class="content-wrapper">
+    <h1>Find Speeds Near Me</h1>
+    
     <div class="container">
-      <div class="logo">
-        <h1>WiFi Speed Heatmap</h1>
+      <div class="status-container">
+        <p id="status">Requesting location permission...</p>
+        <div class="loading"><div></div><div></div><div></div><div></div></div>
+      </div>
+      
+      <button id="run-test-btn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
+      
+      <div id="metrics-container" class="speed-metrics">
+        <div class="metric-card">
+          <div class="metric-label">Download</div>
+          <div class="metric-value" id="download-value">--</div>
+          <div class="metric-unit">Mbps</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Upload</div>
+          <div class="metric-value" id="upload-value">--</div>
+          <div class="metric-unit">Mbps</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Ping</div>
+          <div class="metric-value" id="ping-value">--</div>
+          <div class="metric-unit">ms</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Jitter</div>
+          <div class="metric-value" id="jitter-value">--</div>
+          <div class="metric-unit">ms</div>
+        </div>
+      </div>
+      
+      <div class="status-container">
+        <p id="speed-test-status">Ready to start test</p>
       </div>
     </div>
-  </header>
 
-  <main>
+    <div class="divider"></div>
+
+    <h2>WiFi Speed Heatmap</h2>
     <div class="container">
-      <section>
-        <h2 class="section-title">Location & Speed Test</h2>
-        <div class="status-card">
-          <p id="status">Requesting location permission...</p>
-          <button id="run-test-btn" class="btn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
-          <p id="speed-test-status"></p>
-        </div>
-      </section>
-
-      <section class="heatmap-section">
-        <h2 class="section-title">WiFi Coverage Map</h2>
-        
-        <div class="heatmap-wrapper">
-          <div id="heatmap-container">
-            <img src="/static/Floor1.png" alt="Floor Plan">
-            <div id="heatmap-canvas"></div>
-            <div id="live-dot"></div>
-          </div>
-        </div>
-        
-        <button id="refresh-heatmap-btn" class="btn" onclick="renderHeatmap()">Refresh Heatmap</button>
-        <p id="heatmap-status" class="status-text"></p>
-        <p id="live-dot-status" class="status-text"></p>
-      </section>
+      <div id="heatmap-container">
+        <img src="/static/Floor1.png" alt="Floor Plan">
+        <div id="heatmap-canvas"></div>
+        <div id="live-dot"></div>
+      </div>
+      
+      <button id="refresh-heatmap-btn" onclick="renderHeatmap()">Refresh Heatmap</button>
+      
+      <div class="status-container">
+        <p id="heatmap-status">Ready to load heatmap</p>
+        <p id="live-dot-status">Live location: waiting for data</p>
+      </div>
     </div>
-  </main>
-
-  <footer>
-    <div class="container">
-      <p>&copy; 2025 WiFi Speed Heatmap</p>
-    </div>
-  </footer>
+  </div>
 
   <script>
     // --- Global Variables ---
@@ -265,11 +502,33 @@
     let liveLocationInterval = null;    // Stores the ID for the live location fetching interval
     let runTestButton = null;           // Reference to the button
     let autoTestInterval = null;        // Stores the ID for the automatic test interval
+    let loadingElements = document.querySelectorAll('.loading');
+
+    // --- Update Metric Display Function ---
+    function updateMetricDisplay(download, upload, ping, jitter) {
+      document.getElementById('download-value').innerText = download === "Fail" ? "--" : parseFloat(download || 0).toFixed(1);
+      document.getElementById('upload-value').innerText = upload === "Fail" ? "--" : parseFloat(upload || 0).toFixed(1);
+      document.getElementById('ping-value').innerText = ping === "Fail" ? "--" : parseFloat(ping || 0).toFixed(0);
+      document.getElementById('jitter-value').innerText = jitter === "Fail" ? "--" : parseFloat(jitter || 0).toFixed(0);
+    }
+
+    // --- Toggle Loading Animation ---
+    function toggleLoading(isLoading) {
+      loadingElements.forEach(el => {
+        el.style.display = isLoading ? 'inline-block' : 'none';
+      });
+    }
+
+    // Hide loading initially
+    window.addEventListener('DOMContentLoaded', () => {
+      toggleLoading(false);
+    });
 
     // --- Heatmap Rendering Function ---
     function renderHeatmap() {
         console.log("Attempting to render heatmap...");
         document.getElementById('heatmap-status').innerText = 'Loading heatmap data...';
+        toggleLoading(true);
 
         // Initialize heatmap instance if it doesn't exist
         if (!heatmapInstance) {
@@ -277,16 +536,17 @@
                 heatmapInstance = h337.create({
                     container: document.getElementById('heatmap-canvas'),
                     radius: 150,        // Influence radius of each point
-                    maxOpacity: 0.6,   // Max opacity (0-1)
+                    maxOpacity: 0.7,   // Increased opacity for better contrast
                     minOpacity: 0,     // Min opacity (0-1)
-                    blur: 0.85,        // Blurring effect (0-1)
-                    // Gradient similar to 'coolwarm' but with our brand color
-                    gradient: { '0':'#0000FF', '0.25':'#00FFFF', '0.5':'#FFFFFF', '0.75':'#FFAA00', '1.0':'#C70039' }
+                    blur: 0.92,        // Blurring effect (0-1)
+                    // Gradient with better contrast between red and white
+                    gradient: { '0':'#0000FF', '0.25':'#00FFFF', '0.5':'#FFFFFF', '0.75':'#FFFF00', '1.0':'#FF0000' }
                 });
                 console.log("Heatmap instance initialized.");
             } catch (e) {
                  document.getElementById('heatmap-status').innerText = 'Error initializing heatmap library.';
                  console.error("Heatmap init error:", e);
+                 toggleLoading(false);
                  return;
             }
         }
@@ -303,6 +563,7 @@
                      document.getElementById('heatmap-status').innerText = `Error loading heatmap data: ${heatmapData.error}`;
                      console.error('Server error fetching heatmap data:', heatmapData.error);
                      heatmapInstance.setData({ max: 0, data: [] }); // Clear heatmap on error
+                     toggleLoading(false);
                      return;
                 }
                 // Validate the received data structure
@@ -310,6 +571,7 @@
                      document.getElementById('heatmap-status').innerText = 'Invalid data format received from server.';
                      console.error('Invalid heatmap data format:', heatmapData);
                      heatmapInstance.setData({ max: 0, data: [] }); // Clear invalid data
+                     toggleLoading(false);
                      return;
                 }
 
@@ -321,6 +583,7 @@
                     heatmapInstance.setData(heatmapData); // Set the data points
                     document.getElementById('heatmap-status').innerText = `Heatmap updated (${heatmapData.data.length} points). Max speed: ${Number(heatmapData.max).toFixed(2)} Mbps`;
                 }
+                toggleLoading(false);
             })
             .catch(error => {
                 // Handle network errors or JSON parsing errors
@@ -328,7 +591,8 @@
                 console.error('Error fetching/processing heatmap data:', error);
                 if (heatmapInstance) {
                     heatmapInstance.setData({ max: 0, data: [] }); // Clear heatmap on fetch error
-                 }
+                }
+                toggleLoading(false);
             });
     }
 
@@ -345,6 +609,7 @@
             }
         }
         const liveDotStatus = document.getElementById('live-dot-status');
+        const heatmapContainer = document.getElementById('heatmap-container');
 
         // Fetch the latest live location from the backend
         fetch(`/get-live-location/${session_id}`)
@@ -355,24 +620,35 @@
             .then(locationData => {
                 // Check if location was found and successfully mapped
                 if (locationData && locationData.found === true && locationData.x !== undefined && locationData.y !== undefined) {
-
-                    // Position the dot using the received (potentially clamped) coordinates
-                    liveDotElement.style.left = `${locationData.x}px`;
-                    liveDotElement.style.top = `${locationData.y}px`;
+                    // Get container dimensions
+                    const containerRect = heatmapContainer.getBoundingClientRect();
+                    const containerWidth = containerRect.width;
+                    const containerHeight = containerRect.height;
+                    
+                    // Calculate position as percentage of container dimensions
+                    let xPos = locationData.x;
+                    let yPos = locationData.y;
+                    
+                    // Ensure the dot stays within bounds of the container
+                    xPos = Math.max(6, Math.min(xPos, containerWidth - 6));
+                    yPos = Math.max(6, Math.min(yPos, containerHeight - 6));
+                    
+                    // Position the dot
+                    liveDotElement.style.left = `${xPos}px`;
+                    liveDotElement.style.top = `${yPos}px`;
 
                     // Set color and status based on whether the original point was in bounds
                     if (locationData.in_bounds) {
                         liveDotElement.style.backgroundColor = 'blue';
-                        liveDotElement.classList.remove('out-of-bounds'); // Use classList for potentially more complex styling
-                        if(liveDotStatus) liveDotStatus.innerText = `Live location: (${locationData.x}, ${locationData.y}) [In Bounds]`;
+                        liveDotElement.classList.remove('out-of-bounds');
+                        if(liveDotStatus) liveDotStatus.innerText = `Live location: (${Math.round(xPos)}, ${Math.round(yPos)}) [In Bounds]`;
                     } else {
                         liveDotElement.style.backgroundColor = 'red';
                         liveDotElement.classList.add('out-of-bounds');
-                        if(liveDotStatus) liveDotStatus.innerText = `Live location: (${locationData.x}, ${locationData.y}) [OUT OF BOUNDS - Clamped]`;
+                        if(liveDotStatus) liveDotStatus.innerText = `Live location: (${Math.round(xPos)}, ${Math.round(yPos)}) [OUT OF BOUNDS - Clamped]`;
                     }
                     // Make the dot visible
                     liveDotElement.style.display = 'block';
-
                 } else {
                     // Hide the dot if location data isn't available or mapping failed
                     liveDotElement.style.display = 'none';
@@ -389,29 +665,35 @@
 
     // --- Geolocation Permission Request ---
     function requestAndStoreLocation() {
+      toggleLoading(true);
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          () => { document.getElementById("status").innerHTML = "Location permission granted!"; },
+          () => { 
+            document.getElementById("status").innerHTML = "Location permission granted!";
+            toggleLoading(false);
+          },
           showError,
           { enableHighAccuracy: true } // Request high accuracy
         );
       } else {
         document.getElementById("status").innerHTML = "Geolocation is not supported by this browser.";
+        toggleLoading(false);
       }
     }
 
     // --- Speed Test and Location Saving Logic ---
-    function getLocationAndSpeedTest(isAuto = false) { // isAuto parameter kept for logging distinction
+    function getLocationAndSpeedTest(isAuto = false) {
       if (testInProgress) {
         console.warn("Test already in progress. Skipping " + (isAuto ? "automatic" : "manual") + " run.");
         return;
       }
       testInProgress = true;
-      // --- MODIFIED: Disable button regardless of isAuto ---
+      toggleLoading(true);
+      
       if (runTestButton) {
           runTestButton.disabled = true;
       }
-      // --- END MODIFICATION ---
+      
       console.log("Starting " + (isAuto ? "automatic" : "manual") + " speed test...");
       document.getElementById("speed-test-status").innerHTML = "Starting test...";
       document.getElementById("status").innerHTML = "Getting current location for test...";
@@ -442,11 +724,15 @@
           // Update speed status during test
           s.onupdate = function (data) {
             latestData = data;
+            // Update the status text
             document.getElementById("speed-test-status").innerHTML =
               `Download: ${data.dlStatus} Mbps<br>` +
               `Upload: ${data.ulStatus} Mbps<br>` +
               `Ping: ${data.pingStatus} ms<br>` +
               `Jitter: ${data.jitterStatus} ms`;
+              
+            // Update the cards
+            updateMetricDisplay(data.dlStatus, data.ulStatus, data.pingStatus, data.jitterStatus);
           };
 
           // When speed test ends
@@ -456,6 +742,7 @@
                 // Re-enable button and allow new tests
                 testInProgress = false;
                 if (runTestButton) runTestButton.disabled = false;
+                toggleLoading(false);
                 return;
             }
             if (!latestData) {
@@ -463,6 +750,7 @@
                 // Re-enable button and allow new tests
                 testInProgress = false;
                 if (runTestButton) runTestButton.disabled = false;
+                toggleLoading(false);
                 return;
             }
             latestData.aborted = aborted;
@@ -490,7 +778,7 @@
             .then(speedSubmitResult => {
                console.log("Speed results submitted:", speedSubmitResult);
                // 4. Send location data associated with this test run AFTER speed submit is successful
-               // Pass uniqueId (isAuto is no longer needed for button logic here)
+               // Pass uniqueId
                sendLocation(uniqueId);
             })
             .catch(err => {
@@ -499,6 +787,7 @@
               // Re-enable button and allow new tests even if submit fails
               testInProgress = false;
               if (runTestButton) runTestButton.disabled = false;
+              toggleLoading(false);
             });
           };
 
@@ -512,11 +801,11 @@
             // Re-enable button and allow new tests if ID generation fails
             testInProgress = false;
             if (runTestButton) runTestButton.disabled = false;
+            toggleLoading(false);
         });
     }
 
     // --- Send Specific Test Location to Backend ---
-    // Modified: Removed isAuto parameter as it's no longer needed for button logic here
     function sendLocation(uniqueId) {
       console.log("Attempting to send location for test ID:", uniqueId);
       document.getElementById("status").innerHTML = "Sending location data for test...";
@@ -553,6 +842,7 @@
             // Mark test as complete and re-enable button AFTER location save attempt
             testInProgress = false;
             if (runTestButton) runTestButton.disabled = false;
+            toggleLoading(false);
           });
         },
         (err) => {
@@ -563,6 +853,7 @@
           // Allow retrying test even if location save fails, re-enable button
           testInProgress = false;
           if (runTestButton) runTestButton.disabled = false;
+          toggleLoading(false);
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } // Options for getting fresh location
       );
@@ -606,6 +897,7 @@
       }
       console.error("Geolocation Error:", error.code, message);
       document.getElementById("status").innerHTML = "Error: " + message;
+      toggleLoading(false);
     }
 
     // --- Initial Setup on Page Load ---
@@ -613,6 +905,21 @@
       console.log("Window loaded. Initializing application...");
       runTestButton = document.getElementById('run-test-btn'); // Get button reference
       liveDotElement = document.getElementById('live-dot'); // Get reference to the dot element
+      loadingElements = document.querySelectorAll('.loading'); // Get all loading elements
+      
+      // Add entrance animations to containers
+      const containers = document.querySelectorAll('.container');
+      containers.forEach((container, index) => {
+        container.style.opacity = '0';
+        container.style.transform = 'translateY(30px)';
+        container.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        
+        setTimeout(() => {
+          container.style.opacity = '1';
+          container.style.transform = 'translateY(0)';
+        }, 300 + (index * 150));
+      });
+      
       requestAndStoreLocation();       // Request permission
       startRealTimeLocationUpdates();  // Start sending background location updates
       renderHeatmap();                // Render initial heatmap
@@ -626,7 +933,7 @@
       autoTestInterval = setInterval(() => {
           // Call getLocationAndSpeedTest (isAuto flag is still passed for logging, but not needed for button logic)
           getLocationAndSpeedTest(true);
-      }, 1000); // 60000 ms = 1 minute
+      }, 60000); // 60000 ms = 1 minute
     };
   </script>
 </body>
