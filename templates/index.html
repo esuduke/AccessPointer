@@ -66,7 +66,7 @@
 
   <p id="status">Requesting location permission...</p>
 
-  <button onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
+  <button id="run-test-btn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
   <p id="speed-test-status"></p>
 
   <hr>
@@ -86,6 +86,8 @@
     let heatmapInstance = null;           // Stores the heatmap.js object
     let liveDotElement = null;           // Stores reference to the live dot HTML element
     let liveLocationInterval = null;    // Stores the ID for the live location fetching interval
+    let runTestButton = null;           // Reference to the button
+    let autoTestInterval = null;        // Stores the ID for the automatic test interval
 
     // --- Heatmap Rendering Function ---
     function renderHeatmap() {
@@ -93,6 +95,7 @@
         document.getElementById('heatmap-status').innerText = 'Loading heatmap data...';
 
         // Initialize heatmap instance if it doesn't exist
+        // Reverted heatmap settings to original based on user-provided code in last turn
         if (!heatmapInstance) {
             try {
                 heatmapInstance = h337.create({
@@ -119,8 +122,6 @@
                 return response.json();
             })
             .then(heatmapData => {
-                // console.log("Parsed heatmap JSON data:", heatmapData); // Optional: Log fetched data
-
                 // Handle potential errors returned from the backend
                 if (heatmapData.error) {
                      document.getElementById('heatmap-status').innerText = `Error loading heatmap data: ${heatmapData.error}`;
@@ -224,12 +225,18 @@
     }
 
     // --- Speed Test and Location Saving Logic ---
-    function getLocationAndSpeedTest() {
+    function getLocationAndSpeedTest(isAuto = false) { // isAuto parameter kept for logging distinction
       if (testInProgress) {
-        console.warn("Test already in progress.");
+        console.warn("Test already in progress. Skipping " + (isAuto ? "automatic" : "manual") + " run.");
         return;
       }
       testInProgress = true;
+      // --- MODIFIED: Disable button regardless of isAuto ---
+      if (runTestButton) {
+          runTestButton.disabled = true;
+      }
+      // --- END MODIFICATION ---
+      console.log("Starting " + (isAuto ? "automatic" : "manual") + " speed test...");
       document.getElementById("speed-test-status").innerHTML = "Starting test...";
       document.getElementById("status").innerHTML = "Getting current location for test...";
 
@@ -270,19 +277,34 @@
           s.onend = function (aborted) {
             if (aborted) {
                 document.getElementById("speed-test-status").innerHTML += "<br>❌ Test aborted.";
+                // Re-enable button and allow new tests
                 testInProgress = false;
+                if (runTestButton) runTestButton.disabled = false;
                 return;
             }
             if (!latestData) {
                 document.getElementById("speed-test-status").innerHTML += "<br>❌ Speed test finished but failed to get data.";
+                // Re-enable button and allow new tests
                 testInProgress = false;
+                if (runTestButton) runTestButton.disabled = false;
                 return;
             }
             latestData.aborted = aborted;
             console.log("Speed test ended:", latestData);
 
             // 3. Submit speed results to backend
-            const speedPayload = Object.assign({}, latestData, { session_id: session_id });
+             // Convert "Fail" strings to 0 or handle appropriately
+            const speedPayload = {
+                dlStatus: latestData.dlStatus === "Fail" ? 0 : parseFloat(latestData.dlStatus || 0),
+                ulStatus: latestData.ulStatus === "Fail" ? 0 : parseFloat(latestData.ulStatus || 0),
+                pingStatus: latestData.pingStatus === "Fail" ? 0 : parseFloat(latestData.pingStatus || 0),
+                jitterStatus: latestData.jitterStatus === "Fail" ? 0 : parseFloat(latestData.jitterStatus || 0),
+                clientIp: latestData.clientIp, // Assuming clientIp is always a string
+                testState: latestData.testState,
+                aborted: aborted,
+                session_id: session_id // Include session ID
+            };
+
             fetch("/submit-speed", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -292,12 +314,15 @@
             .then(speedSubmitResult => {
                console.log("Speed results submitted:", speedSubmitResult);
                // 4. Send location data associated with this test run AFTER speed submit is successful
-               sendLocation(uniqueId); // Pass the generated ID for this specific test
+               // Pass uniqueId (isAuto is no longer needed for button logic here)
+               sendLocation(uniqueId);
             })
             .catch(err => {
               document.getElementById("speed-test-status").innerHTML += "<br>❌ Error submitting speed results.";
               console.error("Submit speed error:", err);
-              testInProgress = false; // Allow retrying
+              // Re-enable button and allow new tests even if submit fails
+              testInProgress = false;
+              if (runTestButton) runTestButton.disabled = false;
             });
           };
 
@@ -308,12 +333,15 @@
             // Handle errors in generating the unique ID
             document.getElementById("speed-test-status").innerHTML = "❌ Error starting test process.";
             console.error("Generate ID error:", err);
-            testInProgress = false; // Allow retrying
+            // Re-enable button and allow new tests if ID generation fails
+            testInProgress = false;
+            if (runTestButton) runTestButton.disabled = false;
         });
     }
 
     // --- Send Specific Test Location to Backend ---
-    function sendLocation(uniqueId) { // Accepts the unique ID for this test
+    // Modified: Removed isAuto parameter as it's no longer needed for button logic here
+    function sendLocation(uniqueId) {
       console.log("Attempting to send location for test ID:", uniqueId);
       document.getElementById("status").innerHTML = "Sending location data for test...";
 
@@ -346,7 +374,9 @@
               console.error("Save location error:", err);
           })
           .finally(() => {
-            testInProgress = false; // Mark test as complete (or ready for another)
+            // Mark test as complete and re-enable button AFTER location save attempt
+            testInProgress = false;
+            if (runTestButton) runTestButton.disabled = false;
           });
         },
         (err) => {
@@ -354,7 +384,9 @@
           showError(err);
           document.getElementById("status").innerHTML += "<br>❌ Could not get location for saving.";
           console.error("Get location for save error:", err);
-          testInProgress = false; // Allow retrying test even if location save fails
+          // Allow retrying test even if location save fails, re-enable button
+          testInProgress = false;
+          if (runTestButton) runTestButton.disabled = false;
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } // Options for getting fresh location
       );
@@ -362,7 +394,8 @@
 
     // --- Background Location Update (Sends data for live tracking) ---
     function startRealTimeLocationUpdates() {
-      console.log("Starting background location updates (every 10s)");
+      // Note: interval changed from 10s to 1s in previous steps
+      console.log("Starting background location updates (every 1s)");
       // Set interval to send location updates periodically
       setInterval(() => {
         navigator.geolocation.getCurrentPosition(
@@ -379,9 +412,11 @@
             }).catch(err => console.warn("Background location send failed:", err)); // Log but don't stop interval
           },
           err => console.warn("Real-time location background update error:", err), // Log errors
+          // Note: maximumAge reverted to default (0) from user provided code
           { enableHighAccuracy: true, timeout: 5000 } // Use high accuracy, add timeout
         );
-      }, 1000); // Send update every 10 seconds
+      // Note: interval changed from 10000ms to 1000ms in previous steps
+      }, 1000); // Send update every 1 second
     }
 
     // --- Geolocation Error Display Function ---
@@ -400,14 +435,22 @@
     // --- Initial Setup on Page Load ---
     window.onload = function () {
       console.log("Window loaded. Initializing application...");
+      runTestButton = document.getElementById('run-test-btn'); // Get button reference
       liveDotElement = document.getElementById('live-dot'); // Get reference to the dot element
       requestAndStoreLocation();       // Request permission
       startRealTimeLocationUpdates();  // Start sending background location updates
       renderHeatmap();                // Render initial heatmap
 
-      // Start polling for the live location periodically - CHANGED TO 1 SECOND
+      // Start polling for the live location periodically
       liveLocationInterval = setInterval(updateLiveDotPosition, 1000); // Fetch & update dot every 1s
       updateLiveDotPosition();          // Update dot position immediately on load
+
+      // Start automatic speed test interval (every 60 seconds)
+      console.log("Setting up automatic speed test every 60 seconds.");
+      autoTestInterval = setInterval(() => {
+          // Call getLocationAndSpeedTest (isAuto flag is still passed for logging, but not needed for button logic)
+          getLocationAndSpeedTest(true);
+      }, 60000); // 60000 ms = 1 minute
     };
   </script>
 </body>
