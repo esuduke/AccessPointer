@@ -52,8 +52,8 @@
         display: none;
         /* Ensure it's above heatmap */
         z-index: 10;
-        /* Smooth movement (optional) */
-        transition: top 0.5s linear, left 0.5s linear;
+        /* Smooth movement (optional) - note: might look choppy with 1s updates */
+        /* transition: top 0.5s linear, left 0.5s linear; */
     }
     /* Style for out-of-bounds dot */
     #live-dot.out-of-bounds {
@@ -195,6 +195,7 @@
                     }
                     // Make the dot visible
                     liveDotElement.style.display = 'block';
+
                 } else {
                     // Hide the dot if location data isn't available or mapping failed
                     liveDotElement.style.display = 'none';
@@ -380,7 +381,7 @@
           err => console.warn("Real-time location background update error:", err), // Log errors
           { enableHighAccuracy: true, timeout: 5000 } // Use high accuracy, add timeout
         );
-      }, 10000); // Send update every 10 seconds
+      }, 1000); // Send update every 10 seconds
     }
 
     // --- Geolocation Error Display Function ---
@@ -404,8 +405,8 @@
       startRealTimeLocationUpdates();  // Start sending background location updates
       renderHeatmap();                // Render initial heatmap
 
-      // Start polling for the live location periodically
-      liveLocationInterval = setInterval(updateLiveDotPosition, 5000); // Fetch & update dot every 5s
+      // Start polling for the live location periodically - CHANGED TO 1 SECOND
+      liveLocationInterval = setInterval(updateLiveDotPosition, 1000); // Fetch & update dot every 1s
       updateLiveDotPosition();          // Update dot position immediately on load
     };
   </script>
