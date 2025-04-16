@@ -103,6 +103,18 @@ class TestRoutes(unittest.TestCase):
         # Assert that the HTTP status code is 200
         self.assertEqual(response.status_code, 200)
 
+    def test_save_location_no_location(self):
+        """
+        Test if the /save_location route returns HTTP status 400 (Bad Request)
+        when the latitude and longitude parameters are provided but empty.
+        """
+        # Make a POST request with empty latitude and longitude parameters
+        response = self.client1.post("/save_location?session_id=test-session-id-1&unique_id=test-unique-id-1&latitude=&longitude=")
+
+        # Assert that the HTTP status code is 400
+        # Checks behavior with an empty string value.
+        self.assertEqual(response.status_code, 400)
+
     def test_save_user_location(self):
         """
         Test if the /save_user_location route returns HTTP status 200 (OK)
@@ -119,6 +131,18 @@ class TestRoutes(unittest.TestCase):
 
         # Assert that the HTTP status code is 200
         self.assertEqual(response.status_code, 200)
+
+    def test_save_user_location_no_location(self):
+        """
+        Test if the /save_user_location route returns HTTP status 400 (Bad Request)
+        when the latitude and longitude parameters are provided but empty.
+        """
+        # Make a POST request with empty latitude and longitude parameters
+        response = self.client1.post("/save_user_location?session_id=test-session-id-1&unique_id=test-unique-id-1&latitude=&longitude=")
+
+        # Assert that the HTTP status code is 400
+        # Checks behavior with an empty string value.
+        self.assertEqual(response.status_code, 400)
 
 if __name__ == '__main__':
     unittest.main()
