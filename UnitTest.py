@@ -86,5 +86,39 @@ class TestRoutes(unittest.TestCase):
         # Assert that the 'id' from the first response is not equal to the 'id' from the second response
         self.assertNotEqual(data1["id"], data2["id"], msg="Subsequent calls for the same session should generate different (overwritten) IDs")
 
+    def test_save_location(self):
+        """
+        Test if the /save_location route returns HTTP status 200 (OK)
+        when provided with valid parameters.
+        """
+        # Define the parameters for the request
+        session_id = "test-session-id-1"
+        unique_id = "test-unique-id-1"
+        latitude = 37.7749
+        longitude = -122.4194
+
+        # Make a POST request to the /save_location route with the parameters
+        response = self.client1.post(f"/save_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}")
+
+        # Assert that the HTTP status code is 200
+        self.assertEqual(response.status_code, 200)
+
+    def test_save_user_location(self):
+        """
+        Test if the /save_user_location route returns HTTP status 200 (OK)
+        when provided with valid parameters.
+        """
+        # Define the parameters for the request
+        session_id = "test-session-id-1"
+        unique_id = "test-unique-id-1"
+        latitude = 37.7749
+        longitude = -122.4194
+
+        # Make a POST request to the /save_user_location route with the parameters
+        response = self.client1.post(f"/save_user_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}")
+
+        # Assert that the HTTP status code is 200
+        self.assertEqual(response.status_code, 200)
+
 if __name__ == '__main__':
     unittest.main()
