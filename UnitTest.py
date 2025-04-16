@@ -94,8 +94,8 @@ class TestRoutes(unittest.TestCase):
         # Define the parameters for the request
         session_id = "test-session-id-1"
         unique_id = "test-unique-id-1"
-        latitude = 37.7749
-        longitude = -122.4194
+        latitude = 67.7749
+        longitude = -121.5193
 
         # Make a POST request to the /save_location route with the parameters
         response = self.client1.post(f"/save_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}")
@@ -115,6 +115,63 @@ class TestRoutes(unittest.TestCase):
         # Checks behavior with an empty string value.
         self.assertEqual(response.status_code, 400)
 
+    def test_save_location_missing_unique_id(self):
+        """
+        Test if the /save_location route returns HTTP status 400 (Bad Request)
+        when the unique_id parameter is missing.
+        """
+        session_id = "test-session-id-1"
+        latitude = 47.7749
+        longitude = -122.4194
+
+        response = self.client1.post(f"/save_location?session_id={session_id}&latitude={latitude}&longitude={longitude}")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Missing unique test id ('id')", response.get_json().get("error", ""))
+
+    def test_save_location_invalid_lat_lon_format(self):
+        """
+        Test if the /save_location route returns HTTP status 400 (Bad Request)
+        when the latitude or longitude parameters are invalid.
+        """
+        session_id = "test-session-id-1"
+        unique_id = "test-unique-id-1"
+        latitude = "invalid_lat"
+        longitude = "invalid_lon"
+
+        response = self.client1.post(f"/save_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid data format", response.get_json().get("error", ""))
+
+    def test_save_location_extra_parameters(self):
+        """
+        Test if the /save_location route handles extra parameters properly.
+        """
+        session_id = "test-session-id-1"
+        unique_id = "test-unique-id-1"
+        latitude = 39.7749
+        longitude = -112.4294
+
+        response = self.client1.post(f"/save_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}&extra_param=extra_value")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Location saved successfully!", response.get_json().get("message", ""))
+
+    def test_save_location_boundary_values(self):
+        """
+        Test if the /save_location route handles boundary values for latitude and longitude.
+        """
+        session_id = "test-session-id-1"
+        unique_id = "test-unique-id-1"
+        latitude = 90.0  # Maximum valid latitude
+        longitude = 180.0  # Maximum valid longitude
+
+        response = self.client1.post(f"/save_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Location saved successfully!", response.get_json().get("message", ""))
+
     def test_save_user_location(self):
         """
         Test if the /save_user_location route returns HTTP status 200 (OK)
@@ -123,8 +180,8 @@ class TestRoutes(unittest.TestCase):
         # Define the parameters for the request
         session_id = "test-session-id-1"
         unique_id = "test-unique-id-1"
-        latitude = 37.7749
-        longitude = -122.4194
+        latitude = 35.7749
+        longitude = -121.4194
 
         # Make a POST request to the /save_user_location route with the parameters
         response = self.client1.post(f"/save_user_location?session_id={session_id}&unique_id={unique_id}&latitude={latitude}&longitude={longitude}")
@@ -143,6 +200,32 @@ class TestRoutes(unittest.TestCase):
         # Assert that the HTTP status code is 400
         # Checks behavior with an empty string value.
         self.assertEqual(response.status_code, 400)
+
+    def test_save_user_location_out_of_bounds_lat_lon(self):
+        """
+        Test if the /save_user_location route handles out-of-bounds latitude and longitude.
+        """
+        session_id = "test-session-id-1"
+        latitude = 100.0  # Out of bounds latitude
+        longitude = 200.0  # Out of bounds longitude
+
+        response = self.client1.post("/save_user_location", json={"session_id": session_id, "latitude": latitude, "longitude": longitude})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid lat/lon format", response.get_json().get("error", ""))
+
+    def test_save_user_location_missing_session_id(self):
+        """
+        Test if the /save_user_location route returns HTTP status 400 (Bad Request)
+        when the session_id parameter is missing.
+        """
+        latitude = 38.7749
+        longitude = -112.4194
+
+        response = self.client1.post("/save_user_location", json={"latitude": latitude, "longitude": longitude})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Missing required fields: session_id", response.get_json().get("error", ""))
 
 if __name__ == '__main__':
     unittest.main()
