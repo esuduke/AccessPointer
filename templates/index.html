@@ -1,153 +1,1160 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Geolocation & Speed Test</title>
-  <script>
-    const session_id = crypto.randomUUID();
-    let uniqueId = null;
-
-    function requestAndStoreLocation() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          () => {
-            document.getElementById("status").innerHTML = "Location permission granted!";
-          },
-          showError,
-          { enableHighAccuracy: true }
-        );
-      } else {
-        document.getElementById("status").innerHTML = "Geolocation is not supported by this browser.";
-      }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>Access Pointer</title>
+  <script src="/static/speedtest.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
+  <style>
+    /* --- General Styles --- */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Nicer font */
+      background-color: #ffffff; /* White background */
+      color: #333333; /* Dark grey text for readability */
+      line-height: 1.6;
+      margin: 0;
+      padding: 0 20px; /* Add horizontal padding, vertical handled by containers */
     }
 
-    function getLocationAndSpeedTest() {
-      const btn = document.getElementById("speedTestBtn");
-      btn.disabled = true; // 🔒 Prevent manual spam
-
-      document.getElementById("speed-test-status").innerHTML = "Running speed test...";
-
-      fetch(`/generate_unique_id?session_id=${session_id}`)
-        .then(response => response.json())
-        .then(data => {
-          uniqueId = data.id;
-
-          fetch(`/speed_test?session_id=${session_id}`)
-            .then(response => response.json())
-            .then(testData => {
-              if (testData.error) {
-                document.getElementById("speed-test-status").innerHTML = testData.error;
-                btn.disabled = false;
-                return;
-              }
-
-              document.getElementById("speed-test-status").innerHTML =
-                "Download Speed: " + testData.download_speed + "<br>" +
-                "Upload Speed: " + testData.upload_speed + "<br>" +
-                "Ping: " + testData.ping;
-
-              navigator.geolocation.getCurrentPosition(
-                (position) => {
-                  const lat = position.coords.latitude;
-                  const long = position.coords.longitude;
-
-                  document.getElementById("status").innerHTML =
-                    "Latitude: " + lat + "<br>Longitude: " + long;
-
-                  fetch("/save_location", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      latitude: lat,
-                      longitude: long,
-                      session_id: session_id
-                    })
-                  })
-                  .then(() => btn.disabled = false)
-                  .catch(() => btn.disabled = false);
-                },
-                () => btn.disabled = false,
-                { enableHighAccuracy: true }
-              );
-            })
-            .catch(() => btn.disabled = false);
-        });
+    /* --- Container for text/buttons before and after heatmap --- */
+    .content-container {
+      max-width: 1003px; /* Match heatmap width for alignment */
+      margin: 20px auto; /* Center container and add vertical margin */
+      padding: 20px;
+      border-radius: 8px;
+      background-color: #f9f9f9; /* Optional: slight background for text sections */
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05); /* Optional: subtle shadow */
     }
 
-    function startRealTimeLocationUpdates() {
-      if (navigator.geolocation) {
-        setInterval(() => {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              const latitude = position.coords.latitude;
-              const longitude = position.coords.longitude;
-
-              fetch("/save_user_location", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  latitude: latitude,
-                  longitude: longitude,
-                  session_id: session_id
-                })
-              });
-            },
-            (error) => {
-              console.error("Real-time location error:", error);
-            },
-            { enableHighAccuracy: true }
-          );
-        }, 10000);
-      } else {
-        console.error("Geolocation not supported.");
-      }
+    /* --- Text Element Styling (Applied within .content-container) --- */
+    .content-container h1 {
+      color: #c82c55; /* Primary logo color (Magenta/Red) */
+      text-align: center;
+      margin-top: 0; /* Remove default top margin */
+      margin-bottom: 30px;
     }
 
-    function startBackgroundSpeedTest() {
-      setInterval(() => {
-        fetch(`/check_speed_test_status?session_id=${session_id}`)
-          .then(response => response.json())
-          .then(data => {
-            if (!data.in_progress) {
-              getLocationAndSpeedTest();
-            } else {
-              console.log("Background speed test skipped (already in progress)");
-            }
-          });
-      }, 60000); // every 60 seconds
+    .content-container h2 { /* Style H2 only when it's inside the text container */
+        color: #6a0dad; /* Secondary logo color (Deep Purple) */
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+        margin-top: 10px; /* Adjust top margin */
+        margin-bottom: 20px;
     }
 
-    function showError(error) {
-      let message = "";
-      switch (error.code) {
-        case error.PERMISSION_DENIED:
-          message = "User denied the request for Geolocation.";
-          break;
-        case error.POSITION_UNAVAILABLE:
-          message = "Location information is unavailable.";
-          break;
-        case error.TIMEOUT:
-          message = "The request to get user location timed out.";
-          break;
-        default:
-          message = "An unknown error occurred.";
-      }
-      document.getElementById("status").innerHTML = "Error: " + message;
+
+    .content-container p {
+        margin-bottom: 15px;
+        color: #333333; /* Ensure paragraph text color */
     }
 
-    window.onload = function () {
-      requestAndStoreLocation();
-      startRealTimeLocationUpdates();
-      startBackgroundSpeedTest();
-    };
-  </script>
+     /* Status Text Styles (Applied within .content-container) */
+    .content-container #status,
+    .content-container #speed-test-status {
+        font-size: 0.95em;
+        color: #555;
+        margin-top: 10px;
+        min-height: 1.2em; /* Prevent layout shifts */
+    }
+    .content-container #speed-test-status {
+        font-weight: bold;
+    }
+
+    /* --- Button Styles (Applied within .content-container) --- */
+    .content-container button { /* Style buttons only within the container */
+        background-color: #c82c55; /* Primary logo color */
+        color: #ffffff;
+        border: none;
+        padding: 10px 20px; /* Slightly smaller padding */
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: background-color 0.3s ease;
+        margin-top: 5px; /* Add some space above button */
+        margin-right: 10px;
+    }
+
+    .content-container button:hover {
+        background-color: #a52044; /* Darker shade on hover */
+    }
+
+    .content-container button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+    }
+
+    /* --- Specific button outside container needs separate styling if any */
+     #refresh-heatmap-btn { /* Apply secondary color specifically */
+        background-color: #6a0dad; /* Secondary logo color */
+         color: #ffffff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: background-color 0.3s ease;
+        margin-top: 10px; /* Original margin-top */
+        margin-right: 10px;
+    }
+     #refresh-heatmap-btn:hover {
+        background-color: #520a84; /* Darker shade on hover */
+    }
+
+    /* --- HR Styling --- */
+    hr { /* Style the standalone HR */
+        border: none;
+        border-top: 1px solid #ddd;
+        margin: 30px auto; /* Center HR and add vertical margin */
+        max-width: 1003px; /* Match heatmap width */
+    }
+
+    /* --- Heatmap Container and Content Styles (PRESERVED EXACTLY AS PROVIDED) --- */
+    #heatmap-container {
+      position: relative;
+      border: 1px solid #ccc; /* Keep original border */
+      margin-top: 20px;
+      width: 1003px;
+      height: 800px;
+      overflow: hidden; /* Hide dot if it goes slightly out */
+      /* Center heatmap container */
+      margin-left: auto;
+      margin-right: auto;
+    }
+    #heatmap-container img {
+      display: block; /* Remove extra space below image */
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #heatmap-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      /* Heatmap library will draw here */
+    }
+
+    /* --- Live Dot Styles (PRESERVED EXACTLY AS PROVIDED) --- */
+    #live-dot {
+      position: absolute;
+      width: 10px;         /* Size of the dot */
+      height: 10px;        /* Size of the dot */
+      background-color: blue; /* Default color */
+      border-radius: 50%; /* Make it a circle */
+      border: 1px solid white; /* Optional border */
+      transform: translate(-50%, -50%); /* Center the dot */
+      display: none; /* Start hidden */
+      z-index: 10; /* Ensure it's above heatmap */
+    }
+    #live-dot.out-of-bounds {
+      background-color: red;
+    }
+
+     /* --- Status Text Styles BELOW Heatmap (Needs separate styling if not in container) --- */
+     /* Centered container for bottom status text */
+    .status-container-bottom {
+        max-width: 1003px;
+        margin: 10px auto; /* Centered below heatmap */
+        padding: 0 10px; /* Optional padding */
+        text-align: left; /* Default text alignment */
+    }
+
+    .status-container-bottom p {
+        font-size: 0.95em;
+        color: #555;
+        margin-top: 5px;
+        margin-bottom: 5px;
+        min-height: 1.2em; /* Prevent layout shifts */
+    }
+
+
+  </style>
 </head>
 <body>
-  <h1>Geolocation & Speed Test</h1>
 
-  <p id="status">Requesting location permission...</p>
+  <div class="content-container">
+    <h1>Access Pointer</h1>
+    <p id="status">Requesting location permission...</p>
+    <button id="run-test-btn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
+    <p id="speed-test-status"></p>
+  </div>
 
-  <!-- 🔄 This button now auto-disables while a speed test runs -->
-  <button id="speedTestBtn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
-  <p id="speed-test-status"></p>
+  <hr>
+
+  <h2 style="text-align: center; max-width: 1003px; margin: 20px auto; color: #6a0dad;">WiFi Speed Heatmap</h2>
+
+  <div id="heatmap-container">
+    <img src="/static/Floor1.png" alt="Floor Plan">
+    <div id="heatmap-canvas"></div>
+    <div id="live-dot"></div>
+  </div>
+
+  <div class="status-container-bottom">
+      <button id="refresh-heatmap-btn" onclick="renderHeatmap()">Refresh Heatmap</button>
+      <p id="heatmap-status"></p>
+      <p id="live-dot-status"></p>
+   </div>
+
+  <script>
+    // --- Global Variables ---
+    const session_id = crypto.randomUUID(); // Unique ID for this browser session
+    let testInProgress = false;            // Flag to prevent overlapping tests
+    let heatmapInstance = null;           // Stores the heatmap.js object
+    let liveDotElement = null;           // Stores reference to the live dot HTML element
+    let liveLocationInterval = null;    // Stores the ID for the live location fetching interval
+    let runTestButton = null;           // Reference to the button
+    let autoTestInterval = null;        // Stores the ID for the automatic test interval
+
+    // --- Heatmap Rendering Function ---
+    function renderHeatmap() {
+        console.log("Attempting to render heatmap...");
+        const heatmapStatusEl = document.getElementById('heatmap-status');
+         // Ensure status element exists before updating
+        if (heatmapStatusEl) heatmapStatusEl.innerText = 'Loading heatmap data...';
+
+
+        // Initialize heatmap instance if it doesn't exist
+        if (!heatmapInstance) {
+            try {
+                const canvasContainer = document.getElementById('heatmap-canvas');
+                // Check if canvasContainer exists before creating heatmap
+                if (!canvasContainer) {
+                    console.error("Heatmap canvas container not found!");
+                    if (heatmapStatusEl) heatmapStatusEl.innerText = 'Error: Heatmap canvas element missing.';
+                    return;
+                }
+                heatmapInstance = h337.create({
+                    container: canvasContainer,
+                    // --- ORIGINAL RADIUS ---
+                    radius: 100,
+                    // --- END ORIGINAL RADIUS ---
+                    maxOpacity: 0.6, // Reverted to potentially desired opacity
+                    minOpacity: 0,
+                    blur: 0.85,
+                    gradient: { '0':'#0000FF', '0.25':'#00FFFF', '0.5':'#FFFFFF', '0.75':'#FFFF00', '1.0':'#FF0000' }
+                });
+                console.log("Heatmap instance initialized.");
+            } catch (e) {
+                 if (heatmapStatusEl) heatmapStatusEl.innerText = 'Error initializing heatmap library.';
+                 console.error("Heatmap init error:", e);
+                 return;
+            }
+        }
+
+        // Fetch heatmap data from the backend
+        fetch('/heatmap-data')
+            .then(response => {
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                return response.json();
+            })
+            .then(heatmapData => {
+                 if (!heatmapStatusEl) return; // Exit if status element disappeared
+
+                if (heatmapData.error) {
+                     heatmapStatusEl.innerText = `Error loading heatmap data: ${heatmapData.error}`;
+                     console.error('Server error fetching heatmap data:', heatmapData.error);
+                     if(heatmapInstance) heatmapInstance.setData({ max: 1, data: [] }); // Use max: 1 for safety
+                     return;
+                }
+                if (!heatmapData || typeof heatmapData.max === 'undefined' || !Array.isArray(heatmapData.data)) {
+                     heatmapStatusEl.innerText = 'Invalid data format received from server.';
+                     console.error('Invalid heatmap data format:', heatmapData);
+                     if(heatmapInstance) heatmapInstance.setData({ max: 1, data: [] }); // Use max: 1
+                     return;
+                }
+
+                // Ensure max is appropriate (at least 1 if data exists)
+                let maxToUse = heatmapData.max > 0 ? heatmapData.max : 1.0;
+
+                if (heatmapData.data.length === 0) {
+                    heatmapStatusEl.innerText = 'No heatmap data points available yet.';
+                    if(heatmapInstance) heatmapInstance.setData({ max: maxToUse, data: [] });
+                } else {
+                     if(heatmapInstance) heatmapInstance.setData({ max: maxToUse, data: heatmapData.data });
+                    // Display the original max reported by server for user info
+                    heatmapStatusEl.innerText = `Heatmap updated (${heatmapData.data.length} points). Max speed reported: ${Number(heatmapData.max).toFixed(2)} Mbps`;
+                }
+            })
+            .catch(error => {
+                 if (heatmapStatusEl) heatmapStatusEl.innerText = 'Failed to fetch or process heatmap data.';
+                 console.error('Error fetching/processing heatmap data:', error);
+                 if (heatmapInstance) {
+                     heatmapInstance.setData({ max: 1, data: [] }); // Use max: 1
+                 }
+            });
+    }
+
+    // --- Function to Update Live Dot Position & Color ---
+    function updateLiveDotPosition() {
+        // Ensure liveDotElement is selected
+         if (!liveDotElement) {
+             liveDotElement = document.getElementById('live-dot');
+             if (!liveDotElement) {
+                 // Don't log error repeatedly if element isn't expected
+                 // console.error("Live dot element not found! Stopping updates.");
+                 if (liveLocationInterval) clearInterval(liveLocationInterval);
+                 return;
+            }
+        }
+        const liveDotStatus = document.getElementById('live-dot-status'); // Select status element
+
+        // Fetch the latest live location from the backend
+        fetch(`/get-live-location/${session_id}`)
+            .then(response => {
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
+                return response.json();
+            })
+            .then(locationData => {
+                if (locationData && locationData.found === true && locationData.x !== undefined && locationData.y !== undefined) {
+                    // Use original pixel coordinates directly
+                    liveDotElement.style.left = `${locationData.x}px`;
+                    liveDotElement.style.top = `${locationData.y}px`;
+
+                    if (locationData.in_bounds) {
+                        liveDotElement.style.backgroundColor = 'blue';
+                        liveDotElement.classList.remove('out-of-bounds');
+                        if(liveDotStatus) liveDotStatus.innerText = `Live location active.`; // Simplified status
+                    } else {
+                        liveDotElement.style.backgroundColor = 'red';
+                        liveDotElement.classList.add('out-of-bounds');
+                         // Use original coordinates in status message even if clamped
+                        if(liveDotStatus) liveDotStatus.innerText = `Live location: OUT OF BOUNDS (Pos: ${locationData.x}, ${locationData.y})`;
+                    }
+                    liveDotElement.style.display = 'block';
+                } else {
+                    liveDotElement.style.display = 'none';
+                    if(liveDotStatus) liveDotStatus.innerText = `Live location not available (${locationData.reason || 'unknown'}).`;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching live location:', error);
+                if (liveDotElement) liveDotElement.style.display = 'none';
+                if(liveDotStatus) liveDotStatus.innerText = 'Error updating live location.';
+            });
+    }
+
+
+    // --- Geolocation Permission Request ---
+     function requestAndStoreLocation() {
+        const statusEl = document.getElementById("status"); // Get status element
+        if (!statusEl) return; // Exit if status element not found
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+            () => { statusEl.innerHTML = "✅ Location permission granted!"; },
+            (err) => { showError(err, statusEl); }, // Pass statusEl to showError
+            { enableHighAccuracy: true }
+            );
+        } else {
+            statusEl.innerHTML = "❌ Geolocation is not supported by this browser.";
+        }
+    }
+
+    // --- Speed Test and Location Saving Logic ---
+    function getLocationAndSpeedTest(isAuto = false) {
+        if (testInProgress) {
+            console.warn("Test already in progress. Skipping " + (isAuto ? "automatic" : "manual") + " run.");
+            return;
+        }
+        testInProgress = true;
+        if (runTestButton) { runTestButton.disabled = true; }
+
+        console.log("Starting " + (isAuto ? "automatic" : "manual") + " speed test...");
+        const speedStatusEl = document.getElementById("speed-test-status");
+        const statusEl = document.getElementById("status");
+        // Ensure elements exist before updating
+        if (speedStatusEl) speedStatusEl.innerHTML = "⏳ Starting test...";
+        if (statusEl) statusEl.innerHTML = "⏳ Getting current location for test...";
+
+        const finishTestState = () => {
+            testInProgress = false;
+            if (runTestButton) { runTestButton.disabled = false; }
+        };
+
+        fetch(`/generate_unique_id?session_id=${session_id}`)
+            .then(res => { if (!res.ok) throw new Error(`Generate ID error: ${res.statusText || res.status}`); return res.json(); })
+            .then(data => {
+                if (!data.id) throw new Error("Failed to get unique ID from server.");
+                const uniqueId = data.id;
+                console.log("Generated Unique ID for test:", uniqueId);
+                if (speedStatusEl) speedStatusEl.innerHTML = "⏳ Running speed test...";
+
+                const s = new Speedtest();
+                s.setParameter("telemetry_level", "basic");
+                s.setParameter("time_dl", 10);
+                s.setParameter("time_ul", 5);
+                 // Setting the server is still necessary for the test worker
+                s.setSelectedServer({
+                    name: "Local Server", server: window.location.origin + "/",
+                    dlURL: "backend/garbage", ulURL: "backend/empty",
+                    pingURL: "backend/empty", getIpURL: "backend/getIP"
+                });
+
+                let latestData = null;
+                s.onupdate = function (data) {
+                    latestData = data;
+                     if (!speedStatusEl) return; // Check if element still exists
+                    let dl = data.dlStatus === "Fail" ? "Fail" : `${parseFloat(data.dlStatus || 0).toFixed(2)} Mbps`;
+                    let ul = data.ulStatus === "Fail" ? "Fail" : `${parseFloat(data.ulStatus || 0).toFixed(2)} Mbps`;
+                    let p = data.pingStatus === "Fail" ? "Fail" : `${parseFloat(data.pingStatus || 0).toFixed(2)} ms`;
+                    let j = data.jitterStatus === "Fail" ? "Fail" : `${parseFloat(data.jitterStatus || 0).toFixed(2)} ms`;
+                    speedStatusEl.innerHTML =
+                      `Download: ${dl}<br>` +
+                      `Upload: ${ul}<br>` +
+                      `Ping: ${p}<br>` +
+                      `Jitter: ${j}`;
+                };
+
+                s.onend = function (aborted) {
+                    if (aborted) {
+                         if (speedStatusEl) speedStatusEl.innerHTML += "<br>❌ Test aborted by user.";
+                         finishTestState(); return;
+                    }
+                    if (!latestData) {
+                         if (speedStatusEl) speedStatusEl.innerHTML += "<br>❌ Speed test finished but failed to retrieve data.";
+                         finishTestState(); return;
+                    }
+                    latestData.aborted = aborted;
+                    console.log("Speed test ended:", latestData);
+                    if (speedStatusEl) speedStatusEl.innerHTML += "<br>✅ Test complete. Saving results...";
+
+                    const speedPayload = {
+                        dlStatus: latestData.dlStatus === "Fail" ? 0 : parseFloat(latestData.dlStatus || 0),
+                        ulStatus: latestData.ulStatus === "Fail" ? 0 : parseFloat(latestData.ulStatus || 0),
+                        pingStatus: latestData.pingStatus === "Fail" ? 0 : parseFloat(latestData.pingStatus || 0),
+                        jitterStatus: latestData.jitterStatus === "Fail" ? 0 : parseFloat(latestData.jitterStatus || 0),
+                        clientIp: latestData.clientIp, testState: latestData.testState,
+                        aborted: aborted, session_id: session_id
+                    };
+
+                    fetch("/submit-speed", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(speedPayload)
+                    })
+                    .then(res => { if (!res.ok) throw new Error(`Submit speed error: ${res.statusText || res.status}`); return res.json(); })
+                    .then(speedSubmitResult => {
+                       console.log("Speed results submitted:", speedSubmitResult);
+                       sendLocation(uniqueId); // Proceed to save location
+                    })
+                    .catch(err => {
+                      if (speedStatusEl) speedStatusEl.innerHTML += "<br>❌ Error submitting speed results.";
+                      console.error("Submit speed error:", err);
+                      finishTestState();
+                    });
+                };
+                s.start();
+            })
+            .catch(err => {
+                if (speedStatusEl) speedStatusEl.innerHTML = "❌ Error starting test process (ID generation failed).";
+                console.error("Generate ID error:", err);
+                finishTestState();
+            });
+    }
+
+    // --- Send Specific Test Location to Backend ---
+    function sendLocation(uniqueId) {
+        console.log("Attempting to send location for test ID:", uniqueId);
+        const statusEl = document.getElementById("status");
+        if (statusEl) statusEl.innerHTML = "⏳ Sending location data for test...";
+
+        const finishLocationSendState = () => { // Renamed to avoid conflict
+            testInProgress = false; // Ensure flag is reset here too
+            if (runTestButton) { runTestButton.disabled = false; }
+        };
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const long = position.coords.longitude;
+                 if (statusEl) statusEl.innerHTML = `📍 Location Found: Lat ${lat.toFixed(6)}, Lon ${long.toFixed(6)}`;
+
+                fetch("/save_location", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ latitude: lat, longitude: long, session_id: session_id, id: uniqueId })
+                })
+                .then(res => { if (!res.ok) throw new Error(`Save location error: ${res.statusText || res.status}`); return res.json(); })
+                .then(locationResult => {
+                    console.log("Location saved for test ID:", locationResult);
+                    if (statusEl) statusEl.innerHTML += `<br>✅ Location & Speed Test saved (ID: ${uniqueId}).`;
+                    renderHeatmap();
+                })
+                .catch(err => {
+                    if (statusEl) statusEl.innerHTML += "<br>❌ Error saving location data for test.";
+                    console.error("Save location error:", err);
+                })
+                .finally(() => {
+                    finishLocationSendState();
+                });
+            },
+            (err) => {
+                 // Pass statusEl to showError
+                showError(err, statusEl);
+                if (statusEl) statusEl.innerHTML += "<br>❌ Could not get location for saving.";
+                console.error("Get location for save error:", err);
+                finishLocationSendState();
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 } // Increased timeout
+        );
+    }
+
+    // --- Background Location Update (Sends data for live tracking) ---
+    function startRealTimeLocationUpdates() {
+        console.log("Starting background location updates (every 2s)");
+        setInterval(() => {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    fetch("/save_user_location", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ latitude: position.coords.latitude, longitude: position.coords.longitude, session_id: session_id })
+                    }).catch(err => console.warn("Background location send failed:", err));
+                },
+                err => console.warn("Real-time location background update error:", err.message),
+                { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+            );
+        }, 2000); // Update every 2 seconds
+    }
+
+    // --- Geolocation Error Display Function ---
+    // Modified to accept the element to update
+    function showError(error, element) {
+         if (!element) element = document.getElementById("status"); // Default to status if not provided
+         if (!element) return; // Exit if element still not found
+
+        let message = "";
+        switch (error.code) {
+            case error.PERMISSION_DENIED: message = "Location permission denied by user."; break;
+            case error.POSITION_UNAVAILABLE: message = "Location information is unavailable."; break;
+            case error.TIMEOUT: message = "Location request timed out."; break;
+            default: message = "An unknown location error occurred.";
+        }
+        console.error("Geolocation Error:", error.code, message);
+        element.innerHTML = "❌ Error: " + message;
+    }
+
+
+    // --- Initial Setup on Page Load ---
+    window.onload = function () {
+        console.log("Window loaded. Initializing application...");
+        runTestButton = document.getElementById('run-test-btn');
+        liveDotElement = document.getElementById('live-dot');
+        requestAndStoreLocation();
+        startRealTimeLocationUpdates();
+        renderHeatmap(); // Initial heatmap render
+
+        liveLocationInterval = setInterval(updateLiveDotPosition, 2000); // Match update freq
+        updateLiveDotPosition(); // Initial call
+
+        console.log("Setting up automatic speed test every 60 seconds.");
+        autoTestInterval = setInterval(() => { getLocationAndSpeedTest(true); }, 60000);
+        console.log("Initialization complete.");
+    };
+
+     // Cleanup on page unload
+    window.onunload = function() {
+        if (liveLocationInterval) clearInterval(liveLocationInterval);
+        if (autoTestInterval) clearInterval(autoTestInterval);
+    }
+
+  </script>
 </body>
-</html>
+</html> -->
+
+
+
+<!-- ---------------------------------------------------------------
+
+
+<!-- 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Pointer</title>
+  <script src="/static/speedtest.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/heatmap.js/2.0.2/heatmap.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* --- Root Variables --- */
+    :root {
+      --primary: #C70039;
+      --primary-dark: #900029;
+      --white: #FFFFFF;
+      --light-gray: #f8f8f8;
+      --gray: #e0e0e0;
+      --dark-gray: #888888;
+      --border-radius: 16px;
+      --box-shadow: 0 4px 12px rgba(199, 0, 57, 0.1);
+    }
+
+    /* --- Global Styles --- */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    body {
+      background-color: var(--light-gray);
+      color: #333;
+      padding: 0;
+      max-width: 1600px; /* Max overall page width */
+      margin: 0 auto; /* Center page content */
+    }
+
+    /* --- Navigation Bar --- */
+    .navbar {
+      background-color: var(--primary);
+      color: var(--white);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      position: sticky;
+      top: 0;
+      z-index: 1000; /* Ensure navbar stays on top */
+    }
+
+    .navbar-logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--white);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+    }
+
+    .logo-icon {
+      margin-right: 8px;
+      font-size: 1.2em;
+    }
+
+    /* --- Content Wrapper --- */
+    .content-wrapper {
+      padding: 20px;
+    }
+
+    /* --- Headings --- */
+    h1, h2 {
+      color: var(--primary);
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-top: 1rem;
+    }
+
+    h2 {
+      font-size: 1.8rem;
+      font-weight: 600;
+      margin-top: 2rem;
+    }
+
+    /* --- General Container Styling --- */
+    .container {
+      background-color: var(--white);
+      border-radius: var(--border-radius);
+      padding: 24px;
+      margin-bottom: 2rem;
+      box-shadow: var(--box-shadow);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .container:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 24px rgba(199, 0, 57, 0.15);
+    }
+
+    /* --- Status Containers --- */
+    .status-container {
+      background-color: var(--light-gray);
+      border-radius: var(--border-radius);
+      padding: 16px;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      border: 1px solid var(--gray);
+      min-height: 50px; /* Give status containers some base height */
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* --- Status Text --- */
+    #status, #speed-test-status, #heatmap-status, #live-dot-status {
+      font-size: 1rem;
+      line-height: 1.5;
+      color: #333;
+      margin-bottom: 0.75rem;
+      word-wrap: break-word; /* Prevent long text overflow */
+    }
+
+    /* --- Buttons --- */
+    button {
+      background-color: var(--primary);
+      color: var(--white);
+      border: none;
+      border-radius: 30px;
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: block; /* Make button block level */
+      margin: 1.25rem auto; /* Center button */
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      max-width: 300px; /* Limit button width */
+      width: 80%; /* Make button responsive */
+    }
+
+    /* Button hover effect */
+    button:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: all 0.6s ease;
+    }
+    button:hover:before { left: 100%; }
+    button:hover {
+      background-color: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(199, 0, 57, 0.3);
+    }
+    button:disabled {
+      background-color: var(--dark-gray);
+      cursor: not-allowed;
+      transform: none; box-shadow: none;
+    }
+    button:disabled:before { display: none; }
+
+    /* --- Divider --- */
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      margin: 2rem auto;
+      width: 90%; max-width: 600px;
+    }
+
+    /* --- Speed Metrics Display --- */
+    .speed-metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 16px;
+      margin: 1.5rem auto;
+      max-width: 600px;
+    }
+    .metric-card {
+      background-color: var(--white);
+      border-radius: var(--border-radius);
+      padding: 20px;
+      text-align: center;
+      border: 2px solid var(--primary);
+      transition: all 0.3s ease;
+      box-shadow: var(--box-shadow);
+      position: relative; overflow: hidden;
+    }
+    .metric-card:after {
+      content: ''; position: absolute; top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(circle, rgba(199, 0, 57, 0.1) 0%, transparent 70%);
+      opacity: 0; transition: opacity 0.6s ease; pointer-events: none;
+    }
+    .metric-card:hover { transform: translateY(-8px); box-shadow: 0 12px 24px rgba(199, 0, 57, 0.2); }
+    .metric-card:hover:after { opacity: 1; }
+    .metric-value {
+      font-size: 2rem; font-weight: 700; color: var(--primary);
+      margin: 0.5rem 0; transition: all 0.3s ease;
+    }
+    .metric-card:hover .metric-value { transform: scale(1.1); }
+    .metric-label { font-size: 1rem; font-weight: 500; color: #555; }
+    .metric-unit { font-size: 0.9rem; color: var(--dark-gray); transition: all 0.3s ease; }
+    .metric-card:hover .metric-unit { color: var(--primary); }
+
+    /* --- Heatmap Container Styling (RESPONSIVE) --- */
+    #heatmap-container {
+      position: relative; /* Essential for positioning children */
+      border: 2px solid var(--primary);
+      margin: 20px auto; /* Centers the container */
+      width: 100%;       /* Makes it responsive - take available width */
+      max-width: 600px;  /* Limits width to match backend mapping */
+      height: 0;         /* Height is controlled by padding */
+      padding-bottom: 80%; /* Aspect Ratio: (480/600)*100% */
+      overflow: hidden;  /* Keep contents clipped */
+      border-radius: var(--border-radius);
+      box-shadow: var(--box-shadow);
+      transition: all 0.3s ease; /* Keep hover effects */
+    }
+    #heatmap-container:hover { /* Keep hover */
+        box-shadow: 0 8px 24px rgba(199, 0, 57, 0.2);
+        transform: scale(1.01);
+    }
+
+    /* Styles for elements INSIDE the heatmap container */
+    #heatmap-container img,
+    #heatmap-canvas {
+      position: absolute; /* Position relative to container */
+      top: 0;
+      left: 0;
+      width: 100%; /* Fill the container */
+      height: 100%; /* Fill the container */
+      border-radius: calc(var(--border-radius) - 2px); /* Adjust for border */
+    }
+    #heatmap-container img {
+      display: block; /* Prevent extra space */
+      transition: all 1s ease;
+      z-index: 0; /* Ensure image is behind */
+    }
+    #heatmap-container:hover img {
+       filter: brightness(1.05);
+     }
+    #heatmap-canvas {
+       z-index: 1; /* Ensure canvas is above image */
+    }
+
+    /* --- Live Location Dot --- */
+    #live-dot {
+      position: absolute;
+      width: 12px; height: 12px;
+      background-color: blue;
+      border-radius: 50%; border: 2px solid white;
+      transform: translate(-50%, -50%);
+      display: none;
+      z-index: 10; /* Ensure dot is above canvas */
+      box-shadow: 0 0 10px rgba(0, 0, 255, 0.5);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 0, 255, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(0, 0, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 0, 255, 0); } }
+    #live-dot.out-of-bounds { background-color: red; animation: pulse-red 2s infinite; }
+    @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); } }
+
+    /* --- Loading Animation --- */
+    .loading { display: inline-block; position: relative; width: 80px; height: 20px; margin: 5px auto 0 auto; }
+    .loading div { position: absolute; top: 4px; width: 13px; height: 13px; border-radius: 50%; background: var(--primary); animation-timing-function: cubic-bezier(0, 1, 1, 0); }
+    .loading div:nth-child(1) { left: 8px; animation: loading1 0.6s infinite; }
+    .loading div:nth-child(2) { left: 8px; animation: loading2 0.6s infinite; }
+    .loading div:nth-child(3) { left: 32px; animation: loading2 0.6s infinite; }
+    .loading div:nth-child(4) { left: 56px; animation: loading3 0.6s infinite; }
+    @keyframes loading1 { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+    @keyframes loading2 { 0% { transform: translate(0, 0); } 100% { transform: translate(24px, 0); } }
+    @keyframes loading3 { 0% { transform: scale(1); } 100% { transform: scale(0); } }
+
+    /* --- General Media Queries for Responsiveness --- */
+    @media (max-width: 768px) {
+      .navbar { padding: 10px 16px; }
+      .content-wrapper { padding: 12px; }
+      h1 { font-size: 1.8rem; } h2 { font-size: 1.5rem; }
+      .container { padding: 16px; }
+      .speed-metrics { grid-template-columns: 1fr; }
+      button { width: 90%; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="#" class="navbar-logo">
+      <span class="logo-icon">📍</span>
+      Access Pointer
+    </a>
+  </nav>
+
+  <div class="content-wrapper">
+
+    <h1>Find Speeds Near Me</h1>
+    <div class="container">
+      <div class="status-container">
+        <p id="status">Requesting location permission...</p>
+        <div class="loading" style="display: none;">
+            <div></div><div></div><div></div><div></div>
+        </div>
+      </div>
+      <button id="run-test-btn" onclick="getLocationAndSpeedTest()">Run Speed Test & Send Location</button>
+      <div id="metrics-container" class="speed-metrics">
+        <div class="metric-card"> <div class="metric-label">Download</div> <div class="metric-value" id="download-value">--</div> <div class="metric-unit">Mbps</div> </div>
+        <div class="metric-card"> <div class="metric-label">Upload</div> <div class="metric-value" id="upload-value">--</div> <div class="metric-unit">Mbps</div> </div>
+        <div class="metric-card"> <div class="metric-label">Ping</div> <div class="metric-value" id="ping-value">--</div> <div class="metric-unit">ms</div> </div>
+        <div class="metric-card"> <div class="metric-label">Jitter</div> <div class="metric-value" id="jitter-value">--</div> <div class="metric-unit">ms</div> </div>
+      </div>
+      <div class="status-container"> <p id="speed-test-status">Ready to start test</p> </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <h2>WiFi Speed Heatmap</h2>
+    <div class="container">
+      <div id="heatmap-container">
+         <div id="heatmap-canvas"></div>
+         <img src="/static/Floor1.png" alt="Floor Plan">
+        <div id="live-dot"></div>
+      </div>
+      <button id="refresh-heatmap-btn" onclick="renderHeatmap()">Refresh Heatmap</button>
+      <div class="status-container">
+        <p id="heatmap-status">Ready to load heatmap</p>
+        <p id="live-dot-status">Live location: waiting for data</p>
+      </div>
+    </div>
+  </div><script>
+    // --- Global Variables ---
+    const session_id = crypto.randomUUID();
+    let testInProgress = false;
+    let heatmapInstance = null;
+    let liveDotElement = null;
+    let liveLocationInterval = null;
+    let runTestButton = null;
+    let autoTestInterval = null;
+    let loadingElements = null;
+
+    // --- Update Metric Display ---
+    function updateMetricDisplay(dl, ul, p, j) { /* ... as before ... */ }
+    function updateMetricDisplay(download, upload, ping, jitter) {
+      const dlEl = document.getElementById('download-value'); const ulEl = document.getElementById('upload-value');
+      const pEl = document.getElementById('ping-value'); const jEl = document.getElementById('jitter-value');
+      if (dlEl) dlEl.innerText = download === "Fail" ? "--" : parseFloat(download || 0).toFixed(1);
+      if (ulEl) ulEl.innerText = upload === "Fail" ? "--" : parseFloat(upload || 0).toFixed(1);
+      if (pEl) pEl.innerText = ping === "Fail" ? "--" : parseFloat(ping || 0).toFixed(0);
+      if (jEl) jEl.innerText = jitter === "Fail" ? "--" : parseFloat(jitter || 0).toFixed(0);
+    }
+
+
+    // --- Toggle Loading Animation ---
+    function toggleLoading(isLoading) {
+      if (!loadingElements) loadingElements = document.querySelectorAll('.loading');
+      loadingElements.forEach(el => { el.style.display = isLoading ? 'inline-block' : 'none'; });
+    }
+
+    // --- Heatmap Rendering Function (Simplified Initialization) ---
+    function renderHeatmap() {
+        console.log("Attempting to render heatmap (simple init)...");
+        const statusEl = document.getElementById('heatmap-status');
+        const canvasEl = document.getElementById('heatmap-canvas'); // Target canvas directly
+
+        if (!canvasEl) {
+            console.error("Heatmap canvas element not found!");
+            if (statusEl) statusEl.innerText = "Error: Heatmap canvas element missing.";
+            return;
+        }
+        if (statusEl) statusEl.innerText = 'Loading heatmap data...';
+        toggleLoading(true);
+
+        // Initialize heatmap instance IF IT DOESN'T EXIST YET
+        // We rely on the library to adapt to the container size provided by CSS
+        if (!heatmapInstance) {
+             console.log("Initializing heatmap instance for the first time...");
+             try {
+                heatmapInstance = h337.create({
+                    container: canvasEl, // Initialize on the canvas div
+                    radius: 40,          // Use scaled radius
+                    maxOpacity: 0.7,
+                    minOpacity: 0,
+                    blur: 0.90,
+                    gradient: { '0':'#0000FF', '0.25':'#00FFFF', '0.5':'#FFFFFF', '0.75':'#FFFF00', '1.0':'#FF0000' }
+                });
+                console.log("Heatmap instance initialized with radius 40.");
+            } catch (e) {
+                 if (statusEl) statusEl.innerText = 'Error initializing heatmap library.';
+                 console.error("Heatmap init error:", e);
+                 toggleLoading(false);
+                 return;
+            }
+        } else {
+             // If instance exists, maybe just clear data before fetching new?
+             // Or potentially reconfigure if needed, but start simple.
+             console.log("Heatmap instance exists. Clearing old data.");
+             heatmapInstance.setData({max:1, data:[]}); // Clear previous data
+        }
+
+        // Fetch heatmap data
+        fetch('/heatmap-data')
+            .then(response => { if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`); return response.json(); })
+            .then(heatmapData => {
+                if (heatmapData.error) {
+                     if (statusEl) statusEl.innerText = `Error: ${heatmapData.error}`;
+                     if (heatmapInstance) heatmapInstance.setData({ max: 1, data: [] });
+                     toggleLoading(false); return;
+                }
+                if (!heatmapData || typeof heatmapData.max === 'undefined' || !Array.isArray(heatmapData.data)) {
+                     if (statusEl) statusEl.innerText = 'Invalid data format.';
+                     if (heatmapInstance) heatmapInstance.setData({ max: 1, data: [] });
+                     toggleLoading(false); return;
+                }
+                if (heatmapData.data.length === 0) {
+                    if (statusEl) statusEl.innerText = 'No heatmap data available.';
+                    if (heatmapInstance) heatmapInstance.setData({ max: 1, data: [] });
+                } else {
+                    let maxVal = heatmapData.max > 0 ? heatmapData.max : 1.0;
+                    // Set the fetched data
+                    if (heatmapInstance) {
+                         heatmapInstance.setData({max: maxVal, data: heatmapData.data});
+                         console.log(`Heatmap data set: ${heatmapData.data.length} points.`);
+                    } else {
+                         console.error("Heatmap instance is null, cannot set data.");
+                    }
+                    if (statusEl) statusEl.innerText = `Heatmap updated (${heatmapData.data.length} points). Max: ${Number(heatmapData.max).toFixed(2)} Mbps`;
+                }
+                toggleLoading(false);
+            })
+            .catch(error => {
+                if (statusEl) statusEl.innerText = 'Failed to fetch heatmap data.';
+                console.error('Fetch heatmap error:', error);
+                if (heatmapInstance) heatmapInstance.setData({ max: 1, data: [] });
+                toggleLoading(false);
+            });
+    } // --- End renderHeatmap ---
+
+    // --- Update Live Dot Position ---
+     function updateLiveDotPosition() { /* ... as before, scales coordinates ... */ }
+     function updateLiveDotPosition() {
+        liveDotElement = document.getElementById('live-dot');
+        const liveDotStatus = document.getElementById('live-dot-status');
+        const heatmapContainer = document.getElementById('heatmap-container');
+
+        if (!liveDotElement || !heatmapContainer) { if (liveLocationInterval) clearInterval(liveLocationInterval); return; }
+
+        fetch(`/get-live-location/${session_id}`)
+            .then(response => { if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`); return response.json(); })
+            .then(locationData => {
+                if (locationData && locationData.found === true && locationData.x !== undefined && locationData.y !== undefined) {
+                    const containerRect = heatmapContainer.getBoundingClientRect();
+                    const containerWidth = containerRect.width; const containerHeight = containerRect.height;
+                    let xPos = locationData.x; let yPos = locationData.y;
+
+                    const scaleX = containerWidth / 600; const scaleY = containerHeight / 480;
+                    let displayX = xPos * scaleX; let displayY = yPos * scaleY;
+
+                    const margin = 6;
+                    displayX = Math.max(margin, Math.min(displayX, containerWidth - margin));
+                    displayY = Math.max(margin, Math.min(displayY, containerHeight - margin));
+
+                    liveDotElement.style.left = `${displayX}px`; liveDotElement.style.top = `${displayY}px`;
+                    liveDotElement.classList.toggle('out-of-bounds', !locationData.in_bounds);
+                    if(liveDotStatus) liveDotStatus.innerText = `Live: (${Math.round(locationData.x)}, ${Math.round(locationData.y)})${locationData.in_bounds ? '' : ' [OOB]'}`;
+                    liveDotElement.style.display = 'block';
+                } else {
+                    liveDotElement.style.display = 'none';
+                    if(liveDotStatus) liveDotStatus.innerText = `Live location N/A (${locationData.reason || '?'}).`;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching live location:', error);
+                if (liveDotElement) liveDotElement.style.display = 'none';
+                if(liveDotStatus) liveDotStatus.innerText = 'Error updating live location.';
+            });
+    }
+
+
+    // --- Geolocation Permission ---
+    function requestAndStoreLocation() { /* ... as before ... */ }
+    function requestAndStoreLocation() {
+      const statusEl = document.getElementById("status"); if (!statusEl) return;
+      toggleLoading(true); statusEl.innerText = "Requesting location permission...";
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          () => { statusEl.innerText = "Location permission granted!"; toggleLoading(false); },
+          (err) => { showError(err); toggleLoading(false); }, { enableHighAccuracy: true }
+        );
+      } else { statusEl.innerText = "Geolocation is not supported."; toggleLoading(false); }
+    }
+
+    // --- Speed Test Logic ---
+    function getLocationAndSpeedTest(isAuto = false) { /* ... as before ... */ }
+    function getLocationAndSpeedTest(isAuto = false) {
+        if (testInProgress) { console.warn("Test already in progress."); return; }
+        testInProgress = true; toggleLoading(true);
+        runTestButton = document.getElementById('run-test-btn'); if (runTestButton) runTestButton.disabled = true;
+        console.log("Starting " + (isAuto ? "auto" : "manual") + " speed test...");
+        const speedStatusEl = document.getElementById("speed-test-status"); const statusEl = document.getElementById("status");
+        if (speedStatusEl) speedStatusEl.innerHTML = "Starting test..."; if (statusEl) statusEl.innerText = "Getting current location...";
+        const finishTest = (errorOccurred = false) => { testInProgress = false; toggleLoading(false); if (runTestButton) runTestButton.disabled = false; if (errorOccurred && speedStatusEl) speedStatusEl.innerHTML += "<br>Test failed."; };
+
+        fetch(`/generate_unique_id?session_id=${session_id}`)
+            .then(res => { if (!res.ok) throw new Error(`ID Gen Error: ${res.status}`); return res.json(); })
+            .then(data => {
+                if (!data || !data.id) throw new Error("Failed to get unique ID"); const uniqueId = data.id; console.log("Unique ID:", uniqueId);
+                const s = new Speedtest(); s.setParameter("telemetry_level", "basic"); s.setParameter("time_dl", 10); s.setParameter("time_ul", 5);
+                s.setSelectedServer({ name: "Local", server: window.location.origin + "/", dlURL: "backend/garbage", ulURL: "backend/empty", pingURL: "backend/empty", getIpURL: "backend/getIP" });
+                let latestData = null;
+                s.onupdate = data => { latestData = data; if (speedStatusEl) speedStatusEl.innerHTML = `DL: ${data.dlStatus} Mbps<br>UL: ${data.ulStatus} Mbps<br>Ping: ${data.pingStatus} ms<br>Jitter: ${data.jitterStatus} ms`; updateMetricDisplay(data.dlStatus, data.ulStatus, data.pingStatus, data.jitterStatus); };
+                s.onend = aborted => {
+                    if (aborted || !latestData) { if (speedStatusEl) speedStatusEl.innerHTML += aborted ? "<br>Aborted." : "<br>Failed to get data."; finishTest(true); return; }
+                    console.log("Speed test ended:", latestData); if (speedStatusEl) speedStatusEl.innerHTML += "<br>Saving results...";
+                    const speedPayload = { dlStatus: latestData.dlStatus==="Fail"?0:parseFloat(latestData.dlStatus||0), ulStatus: latestData.ulStatus==="Fail"?0:parseFloat(latestData.ulStatus||0), pingStatus: latestData.pingStatus==="Fail"?0:parseFloat(latestData.pingStatus||0), jitterStatus: latestData.jitterStatus==="Fail"?0:parseFloat(latestData.jitterStatus||0), clientIp: latestData.clientIp, testState: latestData.testState, aborted: aborted, session_id: session_id };
+                    fetch("/submit-speed", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(speedPayload) })
+                        .then(res => { if (!res.ok) throw new Error(`Speed Submit Error: ${res.status}`); return res.json(); })
+                        .then(result => { console.log("Speed saved:", result); sendLocation(uniqueId); })
+                        .catch(err => { console.error(err); if (speedStatusEl) speedStatusEl.innerHTML += "<br>Error saving speed."; finishTest(true); });
+                }; s.start();
+            })
+            .catch(err => { console.error(err); if (speedStatusEl) speedStatusEl.innerHTML = "Error starting test."; finishTest(true); });
+    }
+
+    // --- Send Location Logic ---
+    function sendLocation(uniqueId) { /* ... as before ... */ }
+     function sendLocation(uniqueId) {
+        console.log("Sending location for test ID:", uniqueId); const statusEl = document.getElementById("status"); if (statusEl) statusEl.innerText = "Sending location...";
+        const finishLocationSend = (errorOccurred = false) => { testInProgress = false; toggleLoading(false); if (runTestButton) runTestButton.disabled = false; if (errorOccurred && statusEl) statusEl.innerText += "\nLocation save failed."; };
+        navigator.geolocation.getCurrentPosition(
+            pos => {
+                if (statusEl) statusEl.innerText = `Location Found: ${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+                fetch("/save_location", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, session_id: session_id, id: uniqueId }) })
+                    .then(res => { if (!res.ok) throw new Error(`Location Save Error: ${res.status}`); return res.json(); })
+                    .then(result => { console.log("Location saved:", result); if (statusEl) statusEl.innerText += `\nSaved (ID: ${uniqueId}).`; renderHeatmap(); finishLocationSend(false); })
+                    .catch(err => { console.error(err); finishLocationSend(true); });
+            },
+            err => { showError(err); if (statusEl) statusEl.innerText += "\nCould not get location."; console.error("Get location error:", err); finishLocationSend(true); },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    }
+
+
+    // --- Background Location Update ---
+    function startRealTimeLocationUpdates() { /* ... as before ... */ }
+    function startRealTimeLocationUpdates() {
+        console.log("Starting background location updates (every 1s)");
+        liveLocationInterval = setInterval(() => {
+            navigator.geolocation.getCurrentPosition(
+                pos => { fetch("/save_user_location", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, session_id: session_id }) }).catch(err => console.warn("BG location send failed:", err.message)); },
+                err => console.warn("BG location update error:", err.message), { enableHighAccuracy: true, timeout: 5000, maximumAge: 2000 } );
+        }, 1000);
+    }
+
+    // --- Geolocation Error Display ---
+    function showError(error) { /* ... as before ... */ }
+    function showError(error) {
+        const statusEl = document.getElementById("status"); if (!statusEl) return; let message = "";
+        switch(error.code) { case error.PERMISSION_DENIED: message="Permission denied."; break; case error.POSITION_UNAVAILABLE: message="Location unavailable."; break; case error.TIMEOUT: message="Request timed out."; break; default: message="Unknown error."; }
+        console.error("Geolocation Error:", error.code, message); statusEl.innerText = "Error: " + message;
+    }
+
+    // --- Initial Setup ---
+    window.onload = function () { /* ... as before ... */ }
+    window.onload = function () {
+        console.log("Window loaded. Initializing..."); runTestButton = document.getElementById('run-test-btn'); loadingElements = document.querySelectorAll('.loading');
+        document.querySelectorAll('.container').forEach((container, index) => { container.style.opacity='0'; container.style.transform='translateY(30px)'; container.style.transition='opacity 0.5s ease, transform 0.5s ease'; setTimeout(() => { container.style.opacity='1'; container.style.transform='translateY(0)'; }, 300 + (index * 150)); });
+        requestAndStoreLocation(); startRealTimeLocationUpdates(); renderHeatmap();
+        liveLocationInterval = setInterval(updateLiveDotPosition, 1000); updateLiveDotPosition();
+        console.log("Setting up auto speed test (60s)."); autoTestInterval = setInterval(() => { getLocationAndSpeedTest(true); }, 60000);
+        let resizeTimeout; window.addEventListener('resize', () => { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(() => { console.log("Resized, re-rendering heatmap..."); renderHeatmap(); }, 250); });
+        console.log("Initialization complete.");
+    };
+
+    // --- Cleanup ---
+    window.onunload = function() { /* ... as before ... */ }
+     window.onunload = function() { if (liveLocationInterval) clearInterval(liveLocationInterval); if (autoTestInterval) clearInterval(autoTestInterval); console.log("Intervals cleared."); }
+
+  </script>
+</body>
+</html> -->
