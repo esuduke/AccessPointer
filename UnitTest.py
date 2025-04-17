@@ -5,6 +5,8 @@ Unit tests for the Routes class
 import unittest
 from Routes import Routes
 from flask import Flask
+from unittest.mock import MagicMock
+
 
 class TestRoutes(unittest.TestCase):
     """Test for the Flask routes defined in the Routes class."""
@@ -226,6 +228,86 @@ class TestRoutes(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Missing required fields: session_id", response.get_json().get("error", ""))
+
+    def test_index_route(self):
+        """
+        Test if the index route returns HTTP status 200 (OK)
+        and contains expected HTML content.
+        """
+        response = self.client1.get("/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_heatmap_data_valid_entries(self):
+        """
+        Test if /heatmap-data returns HTTP 200 and correct data
+        when the DB returns multiple valid entries.
+        """
+        mock_data = {
+            1: {"download": 10.5, "location": {"latitude": 43.0376, "longitude": -76.1326}},
+            2: {"download": 20.0, "location": {"latitude": 43.0374, "longitude": -76.1324}}
+        }
+        self.routes_instance.db_handler.get_data = MagicMock(return_value=mock_data)
+
+        response = self.client1.get("/heatmap-data")
+        data = response.get_json()
+
+        # Assert status is OK and correct number of data points
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("data", data)
+        self.assertIn("max", data)
+        self.assertEqual(len(data["data"]), 2)
+        self.assertAlmostEqual(data["max"], 20.0)
+
+    def test_heatmap_data_with_fail_speed(self):
+        """
+        Test if /heatmap-data treats 'Fail' download values as 0.0.
+        """
+        mock_data = {
+            1: {"download": "Fail", "location": {"latitude": 43.0376, "longitude": -76.1326}},
+            2: {"download": 5.0, "location": {"latitude": 43.0375, "longitude": -76.1325}}
+        }
+        self.routes_instance.db_handler.get_data = MagicMock(return_value=mock_data)
+
+        response = self.client1.get("/heatmap-data")
+        data = response.get_json()
+
+        # Assert both entries are returned and max is correct
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(data["data"]), 2)
+        self.assertAlmostEqual(data["max"], 5.0)
+
+    def test_heatmap_data_all_invalid_locations(self):
+        """
+        Test if /heatmap-data skips entries with invalid lat/lon values.
+        """
+        mock_data = {
+            1: {"download": 10.0, "location": {"latitude": None, "longitude": None}},
+            2: {"download": 20.0, "location": {"latitude": "bad", "longitude": "data"}},
+        }
+        self.routes_instance.db_handler.get_data = MagicMock(return_value=mock_data)
+
+        response = self.client1.get("/heatmap-data")
+        data = response.get_json()
+
+        # All invalid locations should be skipped, fallback max = 1.0
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["data"], [])
+        self.assertEqual(data["max"], 1.0)
+
+        
+    def test_heatmap_data_empty(self):
+        """
+        Test if /heatmap-data returns an empty list and max = 1.0 when DB returns no data.
+        """
+        self.routes_instance.db_handler.get_data = MagicMock(return_value={})
+
+        response = self.client1.get("/heatmap-data")
+        data = response.get_json()
+
+        # No data should return fallback max = 1.0
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["data"], [])
+        self.assertEqual(data["max"], 1.0)
 
 if __name__ == '__main__':
     unittest.main()
